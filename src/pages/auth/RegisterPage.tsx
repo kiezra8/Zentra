@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, WifiOff } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '@/services/supabase/client'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -13,30 +13,51 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isNetworkError, setIsNetworkError] = useState(false)
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setIsNetworkError(false)
     setLoading(true)
 
     if (!isSupabaseConfigured) {
-      useAuthStore.setState({
-        user: { id: 'demo-' + Date.now(), email, user_metadata: { name } } as never,
-        isLoading: false,
-      })
-      navigate('/onboarding')
-      setLoading(false)
+      continueOffline()
       return
     }
 
-    const { data, error: err } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { name } },
+    try {
+      const { data, error: err } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      })
+      if (err) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          setIsNetworkError(true)
+          setError('Could not connect to Supabase server. Check your project URL or internet connection.')
+        } else {
+          setError(err.message)
+        }
+        setLoading(false)
+        return
+      }
+      setSession(data.session)
+      navigate('/onboarding')
+    } catch (err: any) {
+      setIsNetworkError(true)
+      setError('Connection failed. You can continue offline locally.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function continueOffline() {
+    useAuthStore.setState({
+      user: { id: 'offline-' + Date.now(), email: email || 'user@zentra.local', user_metadata: { name: name || 'Local User' } } as never,
+      isLoading: false,
     })
-    if (err) { setError(err.message); setLoading(false); return }
-    setSession(data.session)
     navigate('/onboarding')
-    setLoading(false)
   }
 
   return (
@@ -55,8 +76,22 @@ export default function RegisterPage() {
         <div className="card" style={{ borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
           <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
             {error && (
-              <div style={{ background: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: 10, padding: '0.75rem 1rem', color: 'var(--danger)', fontSize: '0.875rem' }}>{error}</div>
+              <div style={{ background: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: 10, padding: '0.75rem 1rem', color: 'var(--danger)', fontSize: '0.875rem' }}>
+                {error}
+              </div>
             )}
+
+            {isNetworkError && (
+              <button
+                type="button"
+                onClick={continueOffline}
+                className="btn btn-secondary btn-full"
+                style={{ background: 'var(--warning-light)', borderColor: 'var(--warning)', color: '#B45309' }}
+              >
+                <WifiOff size={16} /> Continue Offline Mode
+              </button>
+            )}
+
             <div className="input-group">
               <label className="input-label" htmlFor="reg-name">Full name</label>
               <input id="reg-name" type="text" className="input" placeholder="Your name"
@@ -80,11 +115,16 @@ export default function RegisterPage() {
               </div>
             </div>
             <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
-              {loading ? <Loader2 size={20} /> : 'Create Account'}
+              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Create Account'}
             </button>
           </form>
-          <div className="divider-text" style={{ margin: '1.25rem 0' }}>already have an account?</div>
+
+          <div className="divider-text" style={{ margin: '1.25rem 0' }}>or</div>
           <Link to="/auth/login" className="btn btn-secondary btn-full" style={{ textDecoration: 'none' }}>Sign In</Link>
+
+          <button type="button" onClick={continueOffline} className="btn btn-ghost btn-full" style={{ marginTop: '0.5rem' }}>
+            📱 Use Offline Mode
+          </button>
         </div>
       </div>
     </div>

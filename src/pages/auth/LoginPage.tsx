@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, WifiOff } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '@/services/supabase/client'
 import { useAuthStore } from '@/stores/authStore'
 import { useBusinessStore } from '@/stores/businessStore'
 import { db } from '@/database/dexie'
-import { generateId, getDeviceId } from '@/utils/deviceId'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -17,38 +16,53 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isNetworkError, setIsNetworkError] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setIsNetworkError(false)
     setLoading(true)
 
     if (!isSupabaseConfigured) {
-      // Demo mode — bypass auth
-      const fakeUser = { id: 'demo-user-' + Date.now(), email }
-      useAuthStore.setState({ user: fakeUser as never, isLoading: false })
-      const businesses = await db.businesses.where('owner_id').equals('demo').toArray()
-      if (businesses.length > 0) {
-        setActiveBusiness(businesses[0])
-        navigate('/dashboard')
-      } else {
-        navigate('/onboarding')
-      }
-      setLoading(false)
+      await continueOffline()
       return
     }
 
-    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
-    if (err) {
-      setError(err.message)
+    try {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
+      if (err) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          setIsNetworkError(true)
+          setError('Could not connect to Supabase server. Check your project URL or internet connection.')
+        } else {
+          setError(err.message)
+        }
+        setLoading(false)
+        return
+      }
+      setSession(data.session)
+      const businesses = await db.businesses.where('owner_id').equals(data.user.id).toArray()
+      if (businesses.length > 0) navigate('/dashboard')
+      else navigate('/onboarding')
+    } catch (err: any) {
+      setIsNetworkError(true)
+      setError('Connection failed. You can continue offline locally.')
+    } finally {
       setLoading(false)
-      return
     }
-    setSession(data.session)
-    const businesses = await db.businesses.where('owner_id').equals(data.user.id).toArray()
-    if (businesses.length > 0) navigate('/dashboard')
-    else navigate('/onboarding')
-    setLoading(false)
+  }
+
+  async function continueOffline() {
+    const fakeUser = { id: 'offline-' + Date.now(), email: email || 'demo@zentra.local' }
+    useAuthStore.setState({ user: fakeUser as never, isLoading: false })
+    const businesses = await db.businesses.toArray()
+    if (businesses.length > 0) {
+      setActiveBusiness(businesses[0])
+      navigate('/dashboard')
+    } else {
+      navigate('/onboarding')
+    }
   }
 
   return (
@@ -93,16 +107,6 @@ export default function LoginPage() {
         marginTop: '-1.5rem',
       }}>
         <div className="card" style={{ borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-          {!isSupabaseConfigured && (
-            <div style={{
-              background: 'var(--warning-light)', border: '1px solid var(--warning)',
-              borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem',
-              fontSize: '0.875rem', color: '#92400E',
-            }}>
-              ⚠️ <strong>Demo Mode</strong> — Supabase not configured. Data saved locally only.
-            </div>
-          )}
-
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
             {error && (
               <div style={{
@@ -110,6 +114,17 @@ export default function LoginPage() {
                 borderRadius: 10, padding: '0.75rem 1rem',
                 color: 'var(--danger)', fontSize: '0.875rem',
               }}>{error}</div>
+            )}
+
+            {isNetworkError && (
+              <button
+                type="button"
+                onClick={continueOffline}
+                className="btn btn-secondary btn-full"
+                style={{ background: 'var(--warning-light)', borderColor: 'var(--warning)', color: '#B45309' }}
+              >
+                <WifiOff size={16} /> Continue Offline Mode
+              </button>
             )}
 
             <div className="input-group">
@@ -147,18 +162,14 @@ export default function LoginPage() {
             Create a new account
           </Link>
 
-          {!isSupabaseConfigured && (
-            <button
-              onClick={() => {
-                useAuthStore.setState({ user: { id: 'demo', email: 'demo@zentra.app' } as never, isLoading: false })
-                navigate('/onboarding')
-              }}
-              className="btn btn-ghost btn-full"
-              style={{ marginTop: '0.5rem' }}
-            >
-              ✨ Try Demo (no account needed)
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={continueOffline}
+            className="btn btn-ghost btn-full"
+            style={{ marginTop: '0.5rem' }}
+          >
+            📱 Use Offline Mode
+          </button>
         </div>
 
         <p style={{ textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>
