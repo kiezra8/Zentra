@@ -171,11 +171,16 @@ export default function DashboardPage() {
         <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Quick Actions</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.625rem' }}>
           {[
-            { to: '/sales/add',   emoji: '💰', label: isHustler ? 'Add Income' : 'Record Sale',  primary: true },
+            { to: '/sales/add',   emoji: '💰', label: isHustler ? 'Add Income' : 'Record Sale', primary: true },
+            { to: '/products',    emoji: '📦', label: 'Stock & Items', primary: false },
+            { to: '/cashbook',    emoji: '📖', label: 'Cashbook', primary: false },
+            { to: '/customers',   emoji: '👥', label: 'Customers', primary: false },
             { to: '/expenses/add',emoji: '💸', label: 'Add Expense', primary: false },
             isTransport
               ? { to: '/transport', emoji: '🛵', label: 'New Trip', primary: false }
-              : { to: '/customers',emoji: '👤', label: 'Customers', primary: false },
+              : isHustler
+              ? { to: '/hustler',   emoji: '🧑‍💼', label: 'My Income', primary: false }
+              : { to: '/reports',   emoji: '📊', label: 'Reports', primary: false },
           ].map(({ to, emoji, label, primary }) => (
             <Link key={to} to={to} style={{ textDecoration: 'none' }}>
               <div style={{

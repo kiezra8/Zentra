@@ -51,6 +51,9 @@ export interface Business {
   email?: string
   logo_url?: string
   has_employees: boolean
+  subscription_tier?: 'small' | 'medium' | 'big'
+  subscription_status?: 'active' | 'expired' | 'trial'
+  subscription_expires_at?: number
   settings: BusinessSettings
   created_at: number
   updated_at: number
@@ -59,6 +62,20 @@ export interface Business {
   device_id: string
   version: number
 }
+
+export interface SubscriptionTierConfig {
+  id: 'small' | 'medium' | 'big'
+  name: string
+  priceUGX: number
+  description: string
+  emoji: string
+}
+
+export const SUBSCRIPTION_TIERS: SubscriptionTierConfig[] = [
+  { id: 'small',  name: 'Small Business',  priceUGX: 5000,  description: 'Single-operator kiosks, boda riders, micro shops', emoji: '🏪' },
+  { id: 'medium', name: 'Medium Business', priceUGX: 10000, description: 'Growing shops, agents, salon & service businesses', emoji: '🏢' },
+  { id: 'big',    name: 'Big / Enterprise', priceUGX: 50000, description: 'Wholesalers, multi-branch & large stores', emoji: '🏬' },
+]
 
 export interface BusinessSettings {
   currency: string

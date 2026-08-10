@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Loader2, ChevronDown, Plus, Minus, Package, Trash2, Info } from 'lucide-react'
+import { Loader2, ChevronDown, Plus, Minus, Package, Printer, CheckCircle } from 'lucide-react'
 import { db, buildSyncMeta } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { generateId } from '@/utils/deviceId'
 import { formatCurrency } from '@/utils/currency'
 import { PAYMENT_METHODS, type PaymentMethod } from '@/types/business'
 import type { Sale, SaleItem, Product } from '@/types'
+import ReceiptModal from '@/components/ui/ReceiptModal'
 
 interface CartItem {
   product: Product
@@ -18,7 +19,7 @@ export default function AddSalePage() {
   const navigate = useNavigate()
   const { activeBusiness } = useBusinessStore()
 
-  // Mode: 'quick' (manual amount) or 'cart' (product catalog)
+  // Mode: 'cart' (product catalog) or 'quick' (manual amount)
   const [saleMode, setSaleMode] = useState<'cart' | 'quick'>('cart')
 
   // Quick mode states
@@ -33,7 +34,11 @@ export default function AddSalePage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
-  const [saved, setSaved] = useState(false)
+
+  // Receipt modal state
+  const [savedSale, setSavedSale] = useState<Sale | null>(null)
+  const [savedItems, setSavedItems] = useState<SaleItem[]>([])
+  const [showReceipt, setShowReceipt] = useState(false)
 
   // Live products catalogue query
   const products = useLiveQuery(async () => {
@@ -101,10 +106,11 @@ export default function AddSalePage() {
     }
     await db.sales.add(sale)
 
+    const itemsToSave: SaleItem[] = []
+
     // 2. Process cart products (automatic stock decrease & sale items creation)
     if (saleMode === 'cart') {
       for (const item of cart) {
-        // Create SaleItem
         const saleItem: SaleItem = {
           id: generateId(),
           sale_id: saleId,
@@ -116,6 +122,7 @@ export default function AddSalePage() {
           total: item.product.selling_price * item.quantity,
         }
         await db.saleItems.add(saleItem)
+        itemsToSave.push(saleItem)
 
         // AUTOMATICALLY DECREASE PRODUCT STOCK QTY IN DEXIE!
         const currentProduct = await db.products.get(item.product.id)
@@ -130,10 +137,8 @@ export default function AddSalePage() {
       }
     }
 
-    setSaved(true)
-    setTimeout(() => {
-      navigate(-1)
-    }, 700)
+    setSavedSale(sale)
+    setSavedItems(itemsToSave)
     setLoading(false)
   }
 
@@ -148,11 +153,34 @@ export default function AddSalePage() {
       </div>
 
       <div style={{ padding: '1.25rem' }}>
-        {saved ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>✅</div>
-            <h2 style={{ color: 'var(--success)' }}>Sale Saved!</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Stock updated & saved locally • will sync when online</p>
+        {savedSale ? (
+          <div style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
+            <CheckCircle size={56} style={{ color: 'var(--success)', margin: '0 auto 1rem' }} />
+            <h2 style={{ color: 'var(--success)', marginBottom: '0.25rem' }}>Sale Completed!</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              Receipt #{savedSale.receipt_no} • {formatCurrency(savedSale.total)}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320, margin: '0 auto' }}>
+              {activeBusiness && (
+                <button
+                  type="button"
+                  onClick={() => setShowReceipt(true)}
+                  className="btn btn-primary btn-lg btn-full"
+                  style={{ gap: '0.5rem' }}
+                >
+                  <Printer size={20} /> Print Thermal Receipt
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => navigate('/sales')}
+                className="btn btn-secondary btn-lg btn-full"
+              >
+                Back to Sales List
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -314,11 +342,6 @@ export default function AddSalePage() {
                     UGX {finalTotal.toLocaleString()}
                   </span>
                 </div>
-                {saleMode === 'cart' && (
-                  <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.375rem' }}>
-                    Stock will automatically update for {cart.length} item(s) upon saving.
-                  </p>
-                )}
               </div>
             )}
 
@@ -326,6 +349,16 @@ export default function AddSalePage() {
               {loading ? <Loader2 size={20} className="animate-spin" /> : '💰 Complete & Save Sale'}
             </button>
           </form>
+        )}
+
+        {/* Receipt Modal */}
+        {showReceipt && savedSale && activeBusiness && (
+          <ReceiptModal
+            sale={savedSale}
+            saleItems={savedItems}
+            business={activeBusiness}
+            onClose={() => setShowReceipt(false)}
+          />
         )}
       </div>
     </div>

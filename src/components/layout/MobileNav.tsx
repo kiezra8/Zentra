@@ -1,5 +1,9 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, ArrowLeftRight, BarChart3, MoreHorizontal, Plus } from 'lucide-react'
+import {
+  Home, ArrowLeftRight, BarChart3, MoreHorizontal, Plus,
+  Package, BookOpen, Users, Receipt, Building2, Sparkles, X, Settings
+} from 'lucide-react'
 import { useSyncStore } from '@/stores/syncStore'
 import { useBusinessStore } from '@/stores/businessStore'
 
@@ -48,31 +52,93 @@ export function MobileTopBar() {
 }
 
 export function MobileBottomNav() {
+  const [showMoreDrawer, setShowMoreDrawer] = useState(false)
+  const navigate = useNavigate()
+
+  const moreMenuItems = [
+    { to: '/products',  label: 'Stock & Items', icon: Package, color: 'var(--primary)' },
+    { to: '/cashbook',  label: 'Cashbook',      icon: BookOpen, color: '#059669' },
+    { to: '/customers', label: 'Customers',     icon: Users,    color: '#7C3AED' },
+    { to: '/expenses',  label: 'Expenses',      icon: Receipt,  color: '#DC2626' },
+    { to: '/reports',   label: 'Reports',       icon: BarChart3, color: '#D97706' },
+    { to: '/businesses',label: 'Businesses',    icon: Building2, color: '#4B5563' },
+    { to: '/settings',  label: 'Settings / Subscription', icon: Settings, color: '#0066FF' },
+  ]
+
   return (
-    <nav className="bottom-nav" style={{ display: 'flex' }}>
-      <NavLink to="/dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-        <Home size={20} strokeWidth={2} />
-        <span>Home</span>
-      </NavLink>
+    <>
+      <nav className="bottom-nav" style={{ display: 'flex' }}>
+        <NavLink to="/dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Home size={20} strokeWidth={2} />
+          <span>Home</span>
+        </NavLink>
 
-      <NavLink to="/sales" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-        <ArrowLeftRight size={20} strokeWidth={2} />
-        <span>Sales</span>
-      </NavLink>
+        <NavLink to="/sales" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <ArrowLeftRight size={20} strokeWidth={2} />
+          <span>Sales</span>
+        </NavLink>
 
-      <NavLink to="/sales/add" className="nav-fab" aria-label="Add transaction">
-        <Plus size={24} strokeWidth={2.5} />
-      </NavLink>
+        <NavLink to="/sales/add" className="nav-fab" aria-label="Add transaction">
+          <Plus size={24} strokeWidth={2.5} />
+        </NavLink>
 
-      <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-        <BarChart3 size={20} strokeWidth={2} />
-        <span>Reports</span>
-      </NavLink>
+        <NavLink to="/products" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Package size={20} strokeWidth={2} />
+          <span>Stock</span>
+        </NavLink>
 
-      <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-        <MoreHorizontal size={20} strokeWidth={2} />
-        <span>More</span>
-      </NavLink>
-    </nav>
+        <button
+          onClick={() => setShowMoreDrawer(true)}
+          className={`nav-item ${showMoreDrawer ? 'active' : ''}`}
+        >
+          <MoreHorizontal size={20} strokeWidth={2} />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {/* Mobile "More" Drawer Slide-Up */}
+      {showMoreDrawer && (
+        <div className="modal-backdrop" onClick={() => setShowMoreDrawer(false)} style={{ zIndex: 200 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ borderRadius: '24px 24px 0 0' }}>
+            <div className="modal-handle" />
+            <div className="flex-between" style={{ marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.125rem' }}>All Modules & Shortcuts</h3>
+              <button onClick={() => setShowMoreDrawer(false)} className="btn btn-ghost btn-sm btn-icon">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              {moreMenuItems.map(item => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.to}
+                    onClick={() => {
+                      setShowMoreDrawer(false)
+                      navigate(item.to)
+                    }}
+                    style={{
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 14, padding: '1rem 0.5rem',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
+                      cursor: 'pointer', textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: `${item.color}15`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon size={20} />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
