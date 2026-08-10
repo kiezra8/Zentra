@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Loader2, MapPin, Users, ChevronLeft } from 'lucide-react'
+import { Loader2, MapPin, ChevronLeft } from 'lucide-react'
 import { db, buildSyncMeta } from '@/database/dexie'
 import { useAuthStore } from '@/stores/authStore'
 import { useBusinessStore } from '@/stores/businessStore'
 import { generateId } from '@/utils/deviceId'
 import { BUSINESS_CATEGORIES, type BusinessCategory, type Business } from '@/types/business'
+import SubscriptionModal from '@/components/subscription/SubscriptionModal'
 
 const STEPS = ['Category', 'Name', 'Location', 'Employees']
 
@@ -23,6 +24,7 @@ export default function BusinessSetupPage() {
   const [businessLocation, setBusinessLocation] = useState('')
   const [hasEmployees, setHasEmployees] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showSubscription, setShowSubscription] = useState(false)
 
   async function handleCreate() {
     if (!name.trim()) return
@@ -37,6 +39,7 @@ export default function BusinessSetupPage() {
       currency: 'UGX',
       location: businessLocation.trim() || undefined,
       has_employees: hasEmployees ?? false,
+      subscription_status: 'trial',
       settings: {
         currency: 'UGX',
         currency_symbol: 'UGX',
@@ -53,8 +56,9 @@ export default function BusinessSetupPage() {
     await db.businesses.add(business)
     addBusiness(business)
     setActiveBusiness(business)
-    navigate('/dashboard')
     setLoading(false)
+    // Show subscription modal immediately after business creation
+    setShowSubscription(true)
   }
 
   return (
@@ -180,6 +184,16 @@ export default function BusinessSetupPage() {
           </button>
         )}
       </div>
+
+      {/* Subscription modal shown immediately after business creation */}
+      {showSubscription && (
+        <SubscriptionModal
+          onClose={() => {
+            setShowSubscription(false)
+            navigate('/dashboard')
+          }}
+        />
+      )}
     </div>
   )
 }
