@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Search, Filter } from 'lucide-react'
+import { Plus, Search, Edit3, Lock, Check } from 'lucide-react'
 import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
-import { formatRelative } from '@/utils/date'
-import { startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
+import { formatRelative, formatDateTime, startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
+import type { Sale } from '@/types'
+import { PAYMENT_METHODS, type PaymentMethod } from '@/types/business'
 
 type Period = 'today' | 'week' | 'month' | 'all'
 
@@ -22,7 +23,15 @@ export default function SalesListPage() {
   const [period, setPeriod] = useState<Period>('today')
   const [search, setSearch] = useState('')
 
+  // Edit Modal State (24-Hour Edit Window)
+  const [editingSale, setEditingSale] = useState<Sale | null>(null)
+  const [editTotal, setEditTotal] = useState('')
+  const [editMethod, setEditMethod] = useState<PaymentMethod>('cash')
+  const [editNotes, setEditNotes] = useState('')
+
   const [rangeStart, rangeEnd] = PERIOD_RANGES[period]
+  const now = Date.now()
+  const oneDayMs = 24 * 60 * 60 * 1000
 
   const sales = useLiveQuery(async () => {
     if (!activeBusiness) return []
@@ -47,6 +56,35 @@ export default function SalesListPage() {
   })
 
   const total = filtered.reduce((sum, s) => sum + s.total, 0)
+
+  function handleOpenEdit(sale: Sale) {
+    // 24-hour edit lock check
+    if (now - sale.created_at > oneDayMs) {
+      alert('This transaction is older than 24 hours and cannot be edited to maintain accounting integrity.')
+      return
+    }
+    setEditingSale(sale)
+    setEditTotal(sale.total.toString())
+    setEditMethod(sale.payment_method)
+    setEditNotes(sale.notes || '')
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingSale) return
+
+    const newTotal = parseFloat(editTotal)
+    await db.sales.update(editingSale.id, {
+      total: newTotal,
+      subtotal: newTotal,
+      payment_method: editMethod,
+      notes: editNotes.trim() || undefined,
+      updated_at: Date.now(),
+      sync_status: 'pending',
+    })
+
+    setEditingSale(null)
+  }
 
   return (
     <div className="page-container">
@@ -98,29 +136,92 @@ export default function SalesListPage() {
             </Link>
           </div>
         ) : (
-          filtered.map((sale, i) => (
-            <div key={sale.id} style={{ padding: '1rem 1.25rem', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--success-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', flexShrink: 0 }}>
-                💰
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
-                  {sale.receipt_no ? `Sale #${sale.receipt_no}` : 'Sale'}
+          filtered.map((sale, i) => {
+            const isEditable = now - sale.created_at <= oneDayMs
+
+            return (
+              <div key={sale.id} style={{ padding: '1rem 1.25rem', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--success-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', flexShrink: 0 }}>
+                  💰
                 </div>
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  <span>{formatRelative(sale.created_at)}</span>
-                  <span>•</span>
-                  <span style={{ textTransform: 'capitalize' }}>{sale.payment_method.replace(/_/g, ' ')}</span>
-                  {sale.sync_status === 'pending' && <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>⏳ pending</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                    {sale.receipt_no ? `Sale #${sale.receipt_no}` : 'Sale'}
+                    {!isEditable && (
+                      <span className="badge badge-muted" title="Transactions older than 24 hours cannot be edited">
+                        <Lock size={10} /> 24h Locked
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                    <span>{formatRelative(sale.created_at)}</span>
+                    <span>•</span>
+                    <span style={{ textTransform: 'capitalize' }}>{sale.payment_method.replace(/_/g, ' ')}</span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                    {formatCurrency(sale.total)}
+                  </div>
+
+                  {isEditable ? (
+                    <button
+                      onClick={() => handleOpenEdit(sale)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 4 }}
+                    >
+                      <Edit3 size={13} /> Edit
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 4 }}>
+                      <Lock size={11} /> Fixed
+                    </span>
+                  )}
                 </div>
               </div>
-              <div style={{ fontWeight: 700, color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                {formatCurrency(sale.total)}
-              </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
+
+      {/* 24-Hour Edit Modal */}
+      {editingSale && (
+        <div className="modal-backdrop" onClick={() => setEditingSale(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <h3 style={{ marginBottom: '0.5rem' }}>Edit Recent Sale</h3>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Editable within 24 hours of creation ({formatDateTime(editingSale.created_at)})
+            </p>
+
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="input-group">
+                <label className="input-label" htmlFor="edit-amt">Sale Amount (UGX)</label>
+                <input id="edit-amt" type="number" inputMode="numeric" className="input" value={editTotal} onChange={e => setEditTotal(e.target.value)} required autoFocus />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Payment Method</label>
+                <select className="input" value={editMethod} onChange={e => setEditMethod(e.target.value as PaymentMethod)}>
+                  {PAYMENT_METHODS.map(pm => (
+                    <option key={pm.value} value={pm.value}>{pm.emoji} {pm.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label" htmlFor="edit-notes">Notes</label>
+                <input id="edit-notes" type="text" className="input" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Reason for edit…" />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary btn-full" onClick={() => setEditingSale(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-full">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

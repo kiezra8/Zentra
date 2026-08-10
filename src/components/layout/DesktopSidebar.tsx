@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Receipt, BookOpen,
   Users, BarChart3, Settings, Building2, Bike, Wallet, DollarSign,
-  LogOut, ChevronDown,
+  LogOut, ChevronDown, Package,
 } from 'lucide-react'
 import { useBusinessStore } from '@/stores/businessStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -13,6 +13,7 @@ import type { BusinessCategory } from '@/types/business'
 const BASE_NAV = [
   { to: '/dashboard', label: 'Dashboard',    icon: LayoutDashboard },
   { to: '/sales',     label: 'Sales',         icon: ShoppingCart },
+  { to: '/products',  label: 'Stock & Items', icon: Package },
   { to: '/expenses',  label: 'Expenses',      icon: Receipt },
   { to: '/cashbook',  label: 'Cashbook',      icon: BookOpen },
   { to: '/customers', label: 'Customers',     icon: Users },

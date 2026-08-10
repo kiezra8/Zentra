@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Search, Phone, User, ChevronRight } from 'lucide-react'
+import { Plus, Search, Phone, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { db, buildSyncMeta } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
@@ -15,6 +15,7 @@ export default function CustomersListPage() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [initialDebt, setInitialDebt] = useState('')
   const [loading, setLoading] = useState(false)
 
   const customers = useLiveQuery(async () => {
@@ -37,6 +38,7 @@ export default function CustomersListPage() {
     if (!activeBusiness || !name.trim()) return
     setLoading(true)
 
+    const debtVal = parseFloat(initialDebt || '0')
     const now = Date.now()
     const customer: Customer = {
       id: generateId(),
@@ -44,7 +46,9 @@ export default function CustomersListPage() {
       name: name.trim(),
       phone: phone.trim() || undefined,
       address: address.trim() || undefined,
-      credit_balance: 0,
+      initial_debt: debtVal,
+      credit_balance: debtVal,
+      total_paid: 0,
       total_purchases: 0,
       created_at: now,
       updated_at: now,
@@ -55,6 +59,7 @@ export default function CustomersListPage() {
     setName('')
     setPhone('')
     setAddress('')
+    setInitialDebt('')
     setShowModal(false)
     setLoading(false)
   }
@@ -63,8 +68,8 @@ export default function CustomersListPage() {
     <div className="page-container">
       <div className="flex-between" style={{ marginBottom: '1.25rem', paddingTop: '0.5rem' }}>
         <div>
-          <h2>Customers</h2>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Manage customer debts and history</p>
+          <h2>Customers & Debts</h2>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Manage customer debts & incremental payments</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn btn-primary btn-sm" style={{ gap: '0.375rem' }}>
           <Plus size={16} /> New Customer
@@ -85,7 +90,7 @@ export default function CustomersListPage() {
           <div className="empty-state">
             <span className="empty-icon">👥</span>
             <p className="empty-title">No customers added yet</p>
-            <p className="empty-desc">Creating customer records is optional. You can sell to quick walk-in buyers anytime.</p>
+            <p className="empty-desc">Add customers to track debt balances and payment histories</p>
             <button onClick={() => setShowModal(true)} className="btn btn-primary btn-sm" style={{ marginTop: '0.75rem' }}>
               <Plus size={16} /> Add First Customer
             </button>
@@ -112,7 +117,9 @@ export default function CustomersListPage() {
                       <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: '0.875rem' }}>{formatCurrency(c.credit_balance)}</div>
                     </div>
                   ) : (
-                    <span className="badge badge-success">Clear</span>
+                    <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <CheckCircle2 size={12} /> Cleared
+                    </span>
                   )}
                   <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
                 </div>
@@ -137,10 +144,18 @@ export default function CustomersListPage() {
                 <label className="input-label" htmlFor="cust-phone">Phone Number <span style={{ color: 'var(--text-muted)' }}>(optional)</span></label>
                 <input id="cust-phone" type="tel" className="input" placeholder="e.g. 0770000000" value={phone} onChange={e => setPhone(e.target.value)} />
               </div>
+
+              {/* Initial Debt field */}
+              <div className="input-group">
+                <label className="input-label" htmlFor="cust-debt">Initial Debt Owed (UGX) <span style={{ color: 'var(--text-muted)' }}>(if any)</span></label>
+                <input id="cust-debt" type="number" inputMode="numeric" className="input" placeholder="0" value={initialDebt} onChange={e => setInitialDebt(e.target.value)} />
+              </div>
+
               <div className="input-group">
                 <label className="input-label" htmlFor="cust-addr">Address / Location <span style={{ color: 'var(--text-muted)' }}>(optional)</span></label>
-                <input id="cust-addr" type="text" className="input" placeholder="e.g. Plot 12 Market St" value={address} onChange={e => setAddress(e.target.value)} />
+                <input id="cust-addr" type="text" className="input" placeholder="e.g. Stall 42, Market St" value={address} onChange={e => setAddress(e.target.value)} />
               </div>
+
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button type="button" className="btn btn-secondary btn-full" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary btn-full" disabled={loading}>{loading ? 'Saving…' : 'Save Customer'}</button>

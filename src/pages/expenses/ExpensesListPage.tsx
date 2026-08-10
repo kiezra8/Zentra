@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Edit3, Lock } from 'lucide-react'
 import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
-import { formatRelative } from '@/utils/date'
-import { startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
+import { formatRelative, formatDateTime, startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
 import { EXPENSE_CATEGORIES } from '@/types'
+import type { Expense } from '@/types'
 
 type Period = 'today' | 'week' | 'month' | 'all'
 
@@ -23,7 +23,15 @@ export default function ExpensesListPage() {
   const [period, setPeriod] = useState<Period>('today')
   const [search, setSearch] = useState('')
 
+  // Edit Modal State
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editCategory, setEditCategory] = useState(EXPENSE_CATEGORIES[0].name)
+  const [editDesc, setEditDesc] = useState('')
+
   const [rangeStart, rangeEnd] = PERIOD_RANGES[period]
+  const now = Date.now()
+  const oneDayMs = 24 * 60 * 60 * 1000
 
   const expenses = useLiveQuery(async () => {
     if (!activeBusiness) return []
@@ -48,6 +56,32 @@ export default function ExpensesListPage() {
   })
 
   const total = filtered.reduce((sum, e) => sum + e.amount, 0)
+
+  function handleOpenEdit(exp: Expense) {
+    if (now - exp.created_at > oneDayMs) {
+      alert('This expense is older than 24 hours and cannot be edited.')
+      return
+    }
+    setEditingExpense(exp)
+    setEditAmount(exp.amount.toString())
+    setEditCategory(exp.category_name)
+    setEditDesc(exp.description || '')
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingExpense) return
+
+    await db.expenses.update(editingExpense.id, {
+      amount: parseFloat(editAmount),
+      category_name: editCategory,
+      description: editDesc.trim() || undefined,
+      updated_at: Date.now(),
+      sync_status: 'pending',
+    })
+
+    setEditingExpense(null)
+  }
 
   return (
     <div className="page-container">
@@ -102,34 +136,93 @@ export default function ExpensesListPage() {
           filtered.map((expense, i) => {
             const catObj = EXPENSE_CATEGORIES.find(c => c.name === expense.category_name)
             const emoji = catObj?.emoji ?? '💸'
+            const isEditable = now - expense.created_at <= oneDayMs
+
             return (
               <div key={expense.id} style={{ padding: '1rem 1.25rem', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--danger-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', flexShrink: 0 }}>
                   {emoji}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                     {expense.category_name}
+                    {!isEditable && (
+                      <span className="badge badge-muted" title="Locked after 24h">
+                        <Lock size={10} /> 24h Locked
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
                     <span>{formatRelative(expense.created_at)}</span>
                     {expense.description && (
                       <>
                         <span>•</span>
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{expense.description}</span>
+                        <span>{expense.description}</span>
                       </>
                     )}
-                    {expense.sync_status === 'pending' && <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>⏳ pending</span>}
                   </div>
                 </div>
-                <div style={{ fontWeight: 700, color: 'var(--danger)', whiteSpace: 'nowrap' }}>
-                  -{formatCurrency(expense.amount)}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--danger)', whiteSpace: 'nowrap' }}>
+                    -{formatCurrency(expense.amount)}
+                  </div>
+                  {isEditable ? (
+                    <button
+                      onClick={() => handleOpenEdit(expense)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 4 }}
+                    >
+                      <Edit3 size={13} /> Edit
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 4 }}>
+                      <Lock size={11} /> Fixed
+                    </span>
+                  )}
                 </div>
               </div>
             )
           })
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingExpense && (
+        <div className="modal-backdrop" onClick={() => setEditingExpense(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <h3 style={{ marginBottom: '0.5rem' }}>Edit Expense</h3>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Editable within 24 hours ({formatDateTime(editingExpense.created_at)})
+            </p>
+
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="input-group">
+                <label className="input-label" htmlFor="exp-edit-amt">Amount (UGX)</label>
+                <input id="exp-edit-amt" type="number" inputMode="numeric" className="input" value={editAmount} onChange={e => setEditAmount(e.target.value)} required autoFocus />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Category</label>
+                <select className="input" value={editCategory} onChange={e => setEditCategory(e.target.value)}>
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label" htmlFor="exp-edit-desc">Description</label>
+                <input id="exp-edit-desc" type="text" className="input" value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Reason for expense…" />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary btn-full" onClick={() => setEditingExpense(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-full">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

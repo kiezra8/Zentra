@@ -100,6 +100,7 @@ export interface Product extends SyncMeta {
   selling_price: number
   stock_qty: number
   min_stock: number
+  expiry_date?: number // epoch ms
   supplier_id?: string
   unit?: string
   description?: string
@@ -116,7 +117,9 @@ export interface Customer extends SyncMeta {
   name: string
   phone?: string
   address?: string
+  initial_debt?: number
   credit_balance: number
+  total_paid?: number
   total_purchases: number
   notes?: string
   created_at: number

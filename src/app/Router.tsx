@@ -20,6 +20,7 @@ import TransportPage from '@/modules/transport/TransportPage'
 import HustlerPage from '@/modules/hustler/HustlerPage'
 import MobileMoneyPage from '@/modules/mobile-money/MobileMoneyPage'
 import BusinessSwitchPage from '@/pages/business/BusinessSwitchPage'
+import ProductsPage from '@/pages/products/ProductsPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -71,6 +72,7 @@ export function AppRouter() {
         <Route path="cashbook" element={<CashbookPage />} />
         <Route path="customers" element={<CustomersListPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="products" element={<ProductsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="businesses" element={<BusinessSwitchPage />} />
