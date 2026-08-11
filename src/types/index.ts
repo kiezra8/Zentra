@@ -184,3 +184,117 @@ export interface IncomeEntry extends SyncMeta {
   created_at: number
   updated_at: number
 }
+
+// ─── Clinic / Health ─────────────────────────────
+export interface Patient extends SyncMeta {
+  id: string
+  business_id: string
+  name: string
+  phone?: string
+  gender?: 'male' | 'female' | 'other'
+  dob?: number // epoch ms
+  address?: string
+  blood_group?: string
+  allergies?: string
+  emergency_contact?: string
+  emergency_phone?: string
+  notes?: string
+  created_at: number
+  updated_at: number
+}
+
+export type VisitStatus = 'triage' | 'waiting' | 'with_doctor' | 'closed'
+
+export interface PatientVisit extends SyncMeta {
+  id: string
+  business_id: string
+  patient_id: string
+  visit_date: number
+  chief_complaint: string
+  triage_bp?: string    // e.g. "120/80"
+  triage_temp?: string  // e.g. "36.8°C"
+  triage_weight?: string // e.g. "68kg"
+  triage_pulse?: string
+  diagnosis?: string
+  doctor_notes?: string
+  status: VisitStatus
+  created_at: number
+  updated_at: number
+}
+
+export interface Prescription extends SyncMeta {
+  id: string
+  visit_id: string
+  business_id: string
+  medicine_name: string
+  dosage: string        // e.g. "500mg"
+  frequency: string     // e.g. "3x daily"
+  duration: string      // e.g. "5 days"
+  quantity: number
+  dispensed: boolean
+  dispensed_at?: number
+  created_at: number
+  updated_at: number
+}
+
+export interface PatientBill extends SyncMeta {
+  id: string
+  visit_id: string
+  business_id: string
+  patient_id: string
+  consultation_fee: number
+  medicine_cost: number
+  lab_cost: number
+  other_cost: number
+  total: number
+  paid: number
+  balance: number
+  payment_method?: PaymentMethod
+  status: 'unpaid' | 'partial' | 'paid'
+  created_at: number
+  updated_at: number
+}
+
+// ─── Restaurant / Food ───────────────────────────
+export interface MenuItem extends SyncMeta {
+  id: string
+  business_id: string
+  name: string
+  category: string    // e.g. "Food", "Drinks", "Specials"
+  price: number
+  description?: string
+  is_available: boolean
+  image_url?: string
+  created_at: number
+  updated_at: number
+}
+
+export type OrderStatus = 'open' | 'preparing' | 'served' | 'paid' | 'cancelled'
+
+export interface Order extends SyncMeta {
+  id: string
+  business_id: string
+  table_no?: string
+  customer_name?: string
+  items_count: number
+  subtotal: number
+  discount: number
+  total: number
+  payment_method?: PaymentMethod
+  status: OrderStatus
+  notes?: string
+  created_at: number
+  updated_at: number
+}
+
+export interface OrderItem {
+  id: string
+  order_id: string
+  menu_item_id: string
+  name: string
+  price: number
+  quantity: number
+  total: number
+  notes?: string
+}
+

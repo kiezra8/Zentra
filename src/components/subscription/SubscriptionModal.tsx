@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Smartphone, CheckCircle, ShieldCheck, Loader2, Sparkles, AlertCircle } from 'lucide-react'
+import { Smartphone, CheckCircle, ShieldCheck, Sparkles, AlertCircle, PhoneCall } from 'lucide-react'
 import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
@@ -10,54 +10,98 @@ interface SubscriptionModalProps {
   isPaywall?: boolean
 }
 
+const PAYEE_NUMBER = '0702745945' // Airtel number
+
+function detectNetwork(phone: string): 'mtn' | 'airtel' | null {
+  const clean = phone.replace(/\D/g, '')
+  const prefix = clean.startsWith('0') ? clean.slice(1, 4) : clean.slice(3, 6)
+  const mtn = ['770','771','772','773','774','775','776','778','779','780','781','782','783','784','785','786','787','788','789','390','391','392','310','311','312','760','761','762']
+  const airtel = ['700','701','702','703','704','705','706','707','708','709','750','751','752','753','754','755','756','757','758','759','740','741','742','730','731','732','733']
+  if (mtn.some(p => prefix.startsWith(p.slice(0,2)))) return 'mtn'
+  if (airtel.some(p => prefix.startsWith(p.slice(0,2)))) return 'airtel'
+  return null
+}
+
+function buildUSSD(network: 'mtn' | 'airtel', amount: number): string {
+  const recipient = PAYEE_NUMBER
+  if (network === 'mtn') {
+    // MTN Uganda Send Money: *165*2*RecipientNumber*Amount#
+    return `*165*2*${recipient}*${amount}%23`
+  } else {
+    // Airtel Uganda Send Money: *185*9*RecipientNumber*Amount#
+    return `*185*9*${recipient}*${amount}%23`
+  }
+}
+
 export default function SubscriptionModal({ onClose, isPaywall = false }: SubscriptionModalProps) {
   const { activeBusiness, setActiveBusiness } = useBusinessStore()
   const [selectedTier, setSelectedTier] = useState<SubscriptionTierConfig>(SUBSCRIPTION_TIERS[0])
   const [phone, setPhone] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [statusStep, setStatusStep] = useState<'select' | 'push' | 'success'>('select')
+  const [statusStep, setStatusStep] = useState<'select' | 'dialing' | 'confirm' | 'success'>('select')
   const [errorMessage, setErrorMessage] = useState('')
+  const [network, setNetwork] = useState<'mtn' | 'airtel' | null>(null)
 
   const merchantName = 'Zentra Systems'
 
-  async function handlePay() {
-    if (!phone || phone.length < 10) {
-      setErrorMessage('Please enter a valid 10-digit MTN or Airtel phone number')
+  function handlePhoneChange(val: string) {
+    setPhone(val)
+    setErrorMessage('')
+    const clean = val.replace(/\D/g, '')
+    if (clean.length >= 10) {
+      setNetwork(detectNetwork(clean))
+    } else {
+      setNetwork(null)
+    }
+  }
+
+  function handleInitiateUSSD() {
+    const clean = phone.replace(/\D/g, '')
+    if (clean.length < 10) {
+      setErrorMessage('Enter a valid 10-digit MTN or Airtel phone number')
       return
     }
-    setErrorMessage('')
-    setLoading(true)
-    setStatusStep('push')
 
-    // Simulate Mobile Money USSD Push Prompt
-    setTimeout(async () => {
-      if (!activeBusiness) return
+    const detected = detectNetwork(clean) ?? 'mtn'
+    const ussdCode = buildUSSD(detected, selectedTier.priceUGX)
+    setStatusStep('dialing')
 
-      const now = Date.now()
-      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
-      const expiresAt = now + thirtyDaysMs
+    // Open USSD dialer on Android — triggers real Mobile Money prompt
+    setTimeout(() => {
+      window.location.href = `tel:${ussdCode}`
+    }, 400)
 
-      const updated = {
-        ...activeBusiness,
-        subscription_tier: selectedTier.id,
-        subscription_status: 'active' as const,
-        subscription_expires_at: expiresAt,
-        updated_at: now,
-        sync_status: 'pending' as const,
-      }
+    // After 3s show the "I've paid" confirmation screen
+    setTimeout(() => {
+      setStatusStep('confirm')
+    }, 3000)
+  }
 
-      await db.businesses.update(activeBusiness.id, {
-        subscription_tier: selectedTier.id,
-        subscription_status: 'active',
-        subscription_expires_at: expiresAt,
-        updated_at: now,
-        sync_status: 'pending',
-      })
+  async function handleConfirmPayment() {
+    if (!activeBusiness) return
 
-      setActiveBusiness(updated)
-      setLoading(false)
-      setStatusStep('success')
-    }, 2500)
+    const now = Date.now()
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+    const expiresAt = now + thirtyDaysMs
+
+    const updated = {
+      ...activeBusiness,
+      subscription_tier: selectedTier.id,
+      subscription_status: 'active' as const,
+      subscription_expires_at: expiresAt,
+      updated_at: now,
+      sync_status: 'pending' as const,
+    }
+
+    await db.businesses.update(activeBusiness.id, {
+      subscription_tier: selectedTier.id,
+      subscription_status: 'active',
+      subscription_expires_at: expiresAt,
+      updated_at: now,
+      sync_status: 'pending',
+    })
+
+    setActiveBusiness(updated)
+    setStatusStep('success')
   }
 
   return (
@@ -65,6 +109,7 @@ export default function SubscriptionModal({ onClose, isPaywall = false }: Subscr
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
         {!isPaywall && <div className="modal-handle" />}
 
+        {/* ── STEP 1: Select tier + enter phone ── */}
         {statusStep === 'select' && (
           <div>
             <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
@@ -77,14 +122,14 @@ export default function SubscriptionModal({ onClose, isPaywall = false }: Subscr
                 <Sparkles size={24} />
               </div>
               <h2 style={{ fontSize: '1.25rem' }}>
-                {isPaywall ? 'Subscription Required' : 'Activate Zentra Monthly Plan'}
+                {isPaywall ? '🔒 Subscription Required' : 'Activate Zentra Monthly Plan'}
               </h2>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                Instant Mobile Money authorization to <strong>{merchantName}</strong>
+                Pay via Mobile Money to <strong>{merchantName}</strong>
               </p>
             </div>
 
-            {/* Tiers List */}
+            {/* Tiers */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
               {SUBSCRIPTION_TIERS.map(tier => {
                 const isSelected = selectedTier.id === tier.id
@@ -120,22 +165,35 @@ export default function SubscriptionModal({ onClose, isPaywall = false }: Subscr
               })}
             </div>
 
-            {/* Mobile Money Phone Input */}
+            {/* Phone input */}
             <div className="card" style={{ marginBottom: '1.25rem' }}>
               <div className="input-group">
                 <label className="input-label" htmlFor="sub-phone">
                   <Smartphone size={14} style={{ display: 'inline', marginRight: 4 }} />
-                  MTN or Airtel Money Phone Number
+                  Your MTN or Airtel Money Number
                 </label>
-                <input
-                  id="sub-phone"
-                  type="tel" inputMode="numeric"
-                  className="input"
-                  placeholder="e.g. 0770000000 or 0700000000"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  style={{ fontSize: '1.125rem', fontWeight: 600 }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="sub-phone"
+                    type="tel" inputMode="numeric"
+                    className="input"
+                    placeholder="e.g. 0771234567 or 0701234567"
+                    value={phone}
+                    onChange={e => handlePhoneChange(e.target.value)}
+                    style={{ fontSize: '1.125rem', fontWeight: 600, paddingRight: '5rem' }}
+                  />
+                  {network && (
+                    <span style={{
+                      position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+                      background: network === 'mtn' ? '#FFC300' : '#FF0000',
+                      color: network === 'mtn' ? '#000' : '#fff',
+                      borderRadius: 6, padding: '0.2rem 0.5rem',
+                      fontSize: '0.6875rem', fontWeight: 700,
+                    }}>
+                      {network === 'mtn' ? 'MTN' : 'AIRTEL'}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {errorMessage && (
@@ -146,13 +204,12 @@ export default function SubscriptionModal({ onClose, isPaywall = false }: Subscr
 
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <ShieldCheck size={14} style={{ color: 'var(--success)' }} />
-                Initiates Mobile Money PIN prompt for {selectedTier.name} ({formatCurrency(selectedTier.priceUGX)}).
+                Opens Mobile Money dialer · Enter your PIN to pay {formatCurrency(selectedTier.priceUGX)}
               </div>
             </div>
 
-            {/* CTA */}
-            <button onClick={handlePay} className="btn btn-primary btn-lg btn-full" style={{ gap: '0.5rem' }}>
-              📱 Pay {formatCurrency(selectedTier.priceUGX)} via MoMo
+            <button onClick={handleInitiateUSSD} className="btn btn-primary btn-lg btn-full" style={{ gap: '0.5rem' }}>
+              <PhoneCall size={18} /> Open USSD Dialer · Pay {formatCurrency(selectedTier.priceUGX)}
             </button>
 
             {!isPaywall && onClose && (
@@ -163,28 +220,50 @@ export default function SubscriptionModal({ onClose, isPaywall = false }: Subscr
           </div>
         )}
 
-        {statusStep === 'push' && (
+        {/* ── STEP 2: Dialing ── */}
+        {statusStep === 'dialing' && (
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-            <Loader2 size={48} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 1.25rem' }} />
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Authorize Payment on Phone</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', maxWidth: 340, margin: '0 auto' }}>
-              Check your phone (<strong>{phone}</strong>) and enter your Mobile Money PIN to approve payment of <strong>UGX {selectedTier.priceUGX.toLocaleString()}</strong> to <strong>{merchantName}</strong>.
+            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📲</div>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Opening USSD Dialer…</h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Your phone dialer is opening with the Mobile Money code.<br />
+              Enter your <strong>Mobile Money PIN</strong> to pay <strong>{formatCurrency(selectedTier.priceUGX)}</strong> to <strong>{merchantName}</strong>.
             </p>
           </div>
         )}
 
+        {/* ── STEP 3: Confirm payment ── */}
+        {statusStep === 'confirm' && (
+          <div style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>💳</div>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Did you authorize the payment?</h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              After entering your PIN in the USSD menu, tap below to activate your subscription.
+            </p>
+
+            <button onClick={handleConfirmPayment} className="btn btn-primary btn-lg btn-full" style={{ marginBottom: '0.75rem', gap: '0.5rem' }}>
+              ✅ Yes, I've paid — Activate Subscription
+            </button>
+            <button
+              onClick={() => setStatusStep('select')}
+              className="btn btn-ghost btn-full"
+              style={{ fontSize: '0.875rem' }}
+            >
+              ← Go back / Try again
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 4: Success ── */}
         {statusStep === 'success' && (
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <CheckCircle size={56} style={{ color: 'var(--success)', margin: '0 auto 1rem' }} />
-            <h2 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Payment Approved & Active!</h2>
+            <h2 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Subscription Active! 🎉</h2>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-              Your 30-day <strong>{selectedTier.name}</strong> subscription is active for {activeBusiness?.name}.
+              Your 30-day <strong>{selectedTier.name}</strong> plan is active for <strong>{activeBusiness?.name}</strong>.
             </p>
             <button
-              onClick={() => {
-                setStatusStep('select')
-                if (onClose) onClose()
-              }}
+              onClick={() => { setStatusStep('select'); if (onClose) onClose() }}
               className="btn btn-primary btn-lg btn-full"
             >
               🎉 Continue Using Zentra

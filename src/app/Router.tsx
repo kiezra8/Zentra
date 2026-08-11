@@ -22,6 +22,14 @@ import MobileMoneyPage from '@/modules/mobile-money/MobileMoneyPage'
 import BusinessSwitchPage from '@/pages/business/BusinessSwitchPage'
 import ProductsPage from '@/pages/products/ProductsPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+// Clinic module
+import PatientsListPage from '@/modules/clinic/PatientsListPage'
+import PatientDetailPage from '@/modules/clinic/PatientDetailPage'
+import NewVisitPage from '@/modules/clinic/NewVisitPage'
+import ClinicDispensaryPage from '@/modules/clinic/ClinicDispensaryPage'
+// Restaurant module
+import RestaurantOrdersPage from '@/modules/restaurant/RestaurantOrdersPage'
+import NewOrderPage from '@/modules/restaurant/NewOrderPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore()
@@ -48,12 +56,8 @@ export function AppRouter() {
       <Route path="/auth/register" element={<RegisterPage />} />
 
       {/* Onboarding routes */}
-      <Route path="/onboarding" element={
-        <RequireAuth><CategorySelectPage /></RequireAuth>
-      } />
-      <Route path="/onboarding/setup" element={
-        <RequireAuth><BusinessSetupPage /></RequireAuth>
-      } />
+      <Route path="/onboarding" element={<RequireAuth><CategorySelectPage /></RequireAuth>} />
+      <Route path="/onboarding/setup" element={<RequireAuth><BusinessSetupPage /></RequireAuth>} />
 
       {/* Protected app routes */}
       <Route path="/" element={
@@ -80,6 +84,14 @@ export function AppRouter() {
         <Route path="transport" element={<TransportPage />} />
         <Route path="hustler" element={<HustlerPage />} />
         <Route path="mobile-money" element={<MobileMoneyPage />} />
+        {/* Clinic routes */}
+        <Route path="clinic/patients" element={<PatientsListPage />} />
+        <Route path="clinic/patients/:id" element={<PatientDetailPage />} />
+        <Route path="clinic/visit/new" element={<NewVisitPage />} />
+        <Route path="clinic/dispensary" element={<ClinicDispensaryPage />} />
+        {/* Restaurant routes */}
+        <Route path="restaurant/orders" element={<RestaurantOrdersPage />} />
+        <Route path="restaurant/orders/new" element={<NewOrderPage />} />
       </Route>
 
       {/* Default redirect */}
