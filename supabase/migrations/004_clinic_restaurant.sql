@@ -175,26 +175,43 @@ ALTER TABLE orders         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items    ENABLE ROW LEVEL SECURITY;
 
 -- RLS: users can only see records belonging to their business
-CREATE POLICY IF NOT EXISTS patients_owner ON patients USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS patient_visits_owner ON patient_visits USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS prescriptions_owner ON prescriptions USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS patient_bills_owner ON patient_bills USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS menu_items_owner ON menu_items USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS orders_owner ON orders USING (
-  business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
-);
-CREATE POLICY IF NOT EXISTS order_items_owner ON order_items USING (
-  order_id IN (SELECT id FROM orders WHERE business_id IN (
-    SELECT id FROM businesses WHERE owner_id = auth.uid()
-  ))
-);
+DROP POLICY IF EXISTS patients_owner       ON patients;
+DROP POLICY IF EXISTS patient_visits_owner ON patient_visits;
+DROP POLICY IF EXISTS prescriptions_owner  ON prescriptions;
+DROP POLICY IF EXISTS patient_bills_owner  ON patient_bills;
+DROP POLICY IF EXISTS menu_items_owner     ON menu_items;
+DROP POLICY IF EXISTS orders_owner         ON orders;
+DROP POLICY IF EXISTS order_items_owner    ON order_items;
+
+CREATE POLICY patients_owner ON patients
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY patient_visits_owner ON patient_visits
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY prescriptions_owner ON prescriptions
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY patient_bills_owner ON patient_bills
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY menu_items_owner ON menu_items
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY orders_owner ON orders
+  FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+  );
+CREATE POLICY order_items_owner ON order_items
+  FOR ALL USING (
+    order_id IN (
+      SELECT id FROM orders
+      WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+    )
+  );
+
