@@ -39,10 +39,20 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function RequireBusiness({ children }: { children: React.ReactNode }) {
-  const { activeBusiness } = useBusinessStore()
+  const { activeBusiness, isLoadingBusinesses } = useBusinessStore()
+  // Show loading while BusinessProvider is fetching businesses from Supabase/Dexie
+  if (isLoadingBusinesses) return <LoadingScreen />
   if (!activeBusiness) return <Navigate to="/onboarding" replace />
   return <>{children}</>
 }
+
+// Lighter guard for full-screen pages outside AppShell — waits for load, doesn't wrap in AppShell
+function RequireBusinessLoaded({ children }: { children: React.ReactNode }) {
+  const { isLoadingBusinesses } = useBusinessStore()
+  if (isLoadingBusinesses) return <LoadingScreen />
+  return <>{children}</>
+}
+
 
 export function AppRouter() {
   const { user, isLoading } = useAuthStore()
@@ -87,12 +97,14 @@ export function AppRouter() {
         {/* Clinic routes */}
         <Route path="clinic/patients" element={<PatientsListPage />} />
         <Route path="clinic/patients/:id" element={<PatientDetailPage />} />
-        <Route path="clinic/visit/new" element={<NewVisitPage />} />
         <Route path="clinic/dispensary" element={<ClinicDispensaryPage />} />
         {/* Restaurant routes */}
         <Route path="restaurant/orders" element={<RestaurantOrdersPage />} />
-        <Route path="restaurant/orders/new" element={<NewOrderPage />} />
       </Route>
+
+      {/* Full-screen pages outside AppShell (have their own header/layout) */}
+      <Route path="/clinic/visit/new" element={<RequireAuth><RequireBusinessLoaded><NewVisitPage /></RequireBusinessLoaded></RequireAuth>} />
+      <Route path="/restaurant/orders/new" element={<RequireAuth><RequireBusinessLoaded><NewOrderPage /></RequireBusinessLoaded></RequireAuth>} />
 
       {/* Default redirect */}
       <Route path="*" element={

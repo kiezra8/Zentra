@@ -7,18 +7,28 @@ import { isSupabaseConfigured } from '@/services/supabase/client'
 
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore()
-  const { activeBusiness, setBusinesses, setActiveBusiness } = useBusinessStore()
+  const { activeBusiness, setBusinesses, setActiveBusiness, setLoadingBusinesses } = useBusinessStore()
 
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      // Not logged in — stop showing loading
+      setLoadingBusinesses(false)
+      return
+    }
 
     async function loadBusinesses() {
-      // 1. First, try to pull from Supabase to restore data on fresh login
-      if (isSupabaseConfigured && user) {
-        await pullUserBusinesses(user.id)
+      setLoadingBusinesses(true)
+
+      // 1. Pull from Supabase first to restore data on any device
+      if (isSupabaseConfigured) {
+        try {
+          await pullUserBusinesses(user!.id)
+        } catch {
+          // Network failure is OK — we fall back to local Dexie
+        }
       }
 
-      // 2. Then read from local Dexie (now seeded from Supabase if online)
+      // 2. Read from Dexie (now seeded from Supabase if online)
       const businesses = await db.businesses
         .where('owner_id').equals(user!.id)
         .or('owner_id').equals('demo')
@@ -26,10 +36,20 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
 
       setBusinesses(businesses)
 
-      // If no active business is set, pick the first one
-      if (!activeBusiness && businesses.length > 0) {
+      // 3. Restore active business:
+      //    a) If persisted activeBusiness still exists in the loaded list → keep it
+      //    b) Otherwise pick the first one
+      const persisted = activeBusiness
+      const stillExists = persisted && businesses.some(b => b.id === persisted.id)
+
+      if (!stillExists && businesses.length > 0) {
         setActiveBusiness(businesses[0])
+      } else if (businesses.length === 0) {
+        setActiveBusiness(null)
       }
+      // (if stillExists, no change needed — activeBusiness is already correct)
+
+      setLoadingBusinesses(false)
     }
 
     loadBusinesses()

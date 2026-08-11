@@ -66,7 +66,7 @@ export default function ClinicDashboard() {
       />
 
       <QuickActionsGrid actions={[
-        { to: '/clinic/patients/new',  emoji: '➕', label: 'Register Patient', primary: true },
+        { to: '/clinic/patients',       emoji: '➕', label: 'Register Patient', primary: true },
         { to: '/clinic/patients',      emoji: '👤', label: 'Patients' },
         { to: '/clinic/visit/new',     emoji: '🩺', label: 'New Visit' },
         { to: '/clinic/dispensary',    emoji: '💊', label: 'Dispensary' },
