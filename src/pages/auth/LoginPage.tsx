@@ -42,15 +42,28 @@ export default function LoginPage() {
         return
       }
       setSession(data.session)
-      const businesses = await db.businesses.where('owner_id').equals(data.user.id).toArray()
-      if (businesses.length > 0) navigate('/dashboard')
-      else navigate('/onboarding')
+      
+      // Pull businesses from Supabase first so login works seamlessly on any device
+      const { pullUserBusinesses } = await import('@/services/sync/syncEngine')
+      const pulled = await pullUserBusinesses(data.user.id)
+      const local = await db.businesses.where('owner_id').equals(data.user.id).toArray()
+      const allBiz = pulled.length > 0 ? pulled : local
+
+      if (allBiz.length > 0) {
+        useBusinessStore.getState().setBusinesses(allBiz)
+        useBusinessStore.getState().setActiveBusiness(allBiz[0])
+        useBusinessStore.getState().setLoadingBusinesses(false)
+        navigate('/dashboard')
+      } else {
+        navigate('/onboarding')
+      }
     } catch (err: any) {
       setIsNetworkError(true)
       setError('Connection failed. You can continue offline locally.')
     } finally {
       setLoading(false)
     }
+
   }
 
   async function continueOffline() {

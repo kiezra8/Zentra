@@ -6,7 +6,12 @@ import { useAuthStore } from '@/stores/authStore'
 import { useBusinessStore } from '@/stores/businessStore'
 import { generateId } from '@/utils/deviceId'
 import { BUSINESS_CATEGORIES, type BusinessCategory, type Business } from '@/types/business'
+import { isSupabaseConfigured } from '@/services/supabase/client'
 import SubscriptionModal from '@/components/subscription/SubscriptionModal'
+
+
+
+
 
 const STEPS = ['Category', 'Name', 'Location', 'Employees']
 
@@ -54,11 +59,21 @@ export default function BusinessSetupPage() {
     }
 
     await db.businesses.add(business)
+    if (isSupabaseConfigured && user) {
+      try {
+        const { supabase } = await import('@/services/supabase/client')
+        const { normalizeForSupabase } = await import('@/services/sync/syncEngine')
+        await supabase.from('businesses').upsert(normalizeForSupabase(business))
+      } catch (err) {
+        console.warn('Failed to direct-push business to Supabase:', err)
+      }
+    }
     addBusiness(business)
     setActiveBusiness(business)
     setLoading(false)
     // Show subscription modal immediately after business creation
     setShowSubscription(true)
+
   }
 
   return (

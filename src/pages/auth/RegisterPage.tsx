@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, WifiOff } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '@/services/supabase/client'
 import { useAuthStore } from '@/stores/authStore'
+import { useBusinessStore } from '@/stores/businessStore'
+
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -43,7 +45,19 @@ export default function RegisterPage() {
         return
       }
       setSession(data.session)
+      if (data.session?.user) {
+        const { pullUserBusinesses } = await import('@/services/sync/syncEngine')
+        const pulled = await pullUserBusinesses(data.session.user.id)
+        if (pulled.length > 0) {
+          useBusinessStore.getState().setBusinesses(pulled)
+          useBusinessStore.getState().setActiveBusiness(pulled[0])
+          useBusinessStore.getState().setLoadingBusinesses(false)
+          navigate('/dashboard')
+          return
+        }
+      }
       navigate('/onboarding')
+
     } catch (err: any) {
       setIsNetworkError(true)
       setError('Connection failed. You can continue offline locally.')

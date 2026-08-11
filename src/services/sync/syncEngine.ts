@@ -83,7 +83,8 @@ async function pushDirty(businessId: string): Promise<void> {
 }
 
 // Normalize epoch timestamps to ISO strings for Supabase
-function normalizeForSupabase(record: Record<string, any>): Record<string, any> {
+export function normalizeForSupabase(record: Record<string, any>): Record<string, any> {
+
   const tsFields = ['created_at', 'updated_at', 'synced_at', 'subscription_expires_at', 'expiry_date', 'sale_date']
   const result = { ...record }
   for (const field of tsFields) {
@@ -195,8 +196,8 @@ export async function fullPullFromSupabase(businessId: string): Promise<void> {
 }
 
 // ─── Pull businesses for a user (used at login to seed Dexie) ────────────────
-export async function pullUserBusinesses(userId: string): Promise<void> {
-  if (!isSupabaseConfigured) return
+export async function pullUserBusinesses(userId: string): Promise<import('@/types/business').Business[]> {
+  if (!isSupabaseConfigured) return []
 
   try {
     const { data, error } = await supabase
@@ -204,22 +205,22 @@ export async function pullUserBusinesses(userId: string): Promise<void> {
       .select('*')
       .eq('owner_id', userId)
 
-    if (error || !data) return
+    if (error || !data || data.length === 0) return []
 
+    const list: import('@/types/business').Business[] = []
     for (const remote of data) {
       const normalized = normalizeFromSupabase(remote)
-      const existing = await db.businesses.get(remote.id)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (!existing) {
-        await db.businesses.put({ ...normalized, sync_status: 'synced' } as any)
-      } else if (new Date(remote.updated_at).getTime() > (existing.updated_at || 0)) {
-        await db.businesses.put({ ...normalized, sync_status: 'synced' } as any)
-      }
+      await db.businesses.put({ ...normalized, sync_status: 'synced' } as any)
+      list.push(normalized as import('@/types/business').Business)
     }
+    return list
   } catch (err) {
     console.warn('[SyncEngine] Failed to pull user businesses:', err)
+    return []
   }
 }
+
 
 // ─── Main sync orchestrator ───────────────────────────────────────────────────
 export async function runSync(businessId: string): Promise<void> {

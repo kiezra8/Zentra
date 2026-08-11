@@ -10,7 +10,6 @@ export type BusinessCategory =
   | 'clinic'
   | 'beauty'
   | 'service'
-  | 'farm'
   | 'general'
   | 'custom'
 
@@ -35,10 +34,10 @@ export const BUSINESS_CATEGORIES: BusinessCategoryConfig[] = [
   { id: 'clinic',       emoji: '🏥', name: 'Clinic / Health',          description: 'Small clinic or health business',           modules: ['sales','expenses','customers','reports'], color: '#10B981' },
   { id: 'beauty',       emoji: '💇', name: 'Beauty / Salon / Barber',  description: 'Hair salon, barber, or beauty parlour',     modules: ['sales','expenses','customers','reports'], color: '#EC4899' },
   { id: 'service',      emoji: '🛠️', name: 'Service Business',         description: 'Repairs, cleaning, or service provider',    modules: ['sales','expenses','customers','reports'], color: '#6366F1' },
-  { id: 'farm',         emoji: '🌾', name: 'Farm / Agriculture',       description: 'Farming or agricultural business',          modules: ['sales','expenses','inventory','reports'], color: '#16A34A' },
   { id: 'general',      emoji: '🏢', name: 'General Business',         description: 'Any other type of business',                modules: ['sales','expenses','customers','inventory','reports'], color: '#374151' },
   { id: 'custom',       emoji: '✨', name: 'Custom Business',           description: 'Build your own module setup',               modules: ['sales','expenses','reports'], color: '#6B7280' },
 ]
+
 
 export interface Business {
   id: string
