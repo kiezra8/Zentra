@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Loader2, ChevronDown, Plus, Minus, Package, Printer, CheckCircle } from 'lucide-react'
@@ -18,6 +18,13 @@ interface CartItem {
 export default function AddSalePage() {
   const navigate = useNavigate()
   const { activeBusiness } = useBusinessStore()
+
+  // For restaurants, a sale is an order from the menu (meals, juices, drinks, snacks)
+  useEffect(() => {
+    if (activeBusiness?.category === 'restaurant') {
+      navigate('/restaurant/orders/new', { replace: true })
+    }
+  }, [activeBusiness?.category, navigate])
 
   // Mode: 'cart' (product catalog) or 'quick' (manual amount)
   const [saleMode, setSaleMode] = useState<'cart' | 'quick'>('cart')

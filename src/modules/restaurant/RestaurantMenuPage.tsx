@@ -14,27 +14,43 @@ import type { MenuItem } from '@/types'
 
 const MENU_CATEGORIES = [
   { id: 'all', label: 'All Items', emoji: '🍽️' },
-  { id: 'Breakfast', label: 'Breakfast', emoji: '🍳' },
+  { id: 'Drinks & Juices', label: 'Drinks & Juices', emoji: '🥤' },
   { id: 'Main Dishes', label: 'Main Dishes', emoji: '🍲' },
+  { id: 'Breakfast', label: 'Breakfast', emoji: '🍳' },
   { id: 'Fast Food', label: 'Fast Food', emoji: '🍔' },
   { id: 'Snacks', label: 'Snacks & Bites', emoji: '🍟' },
-  { id: 'Beverages', label: 'Drinks & Beverages', emoji: '🥤' },
   { id: 'Desserts', label: 'Desserts', emoji: '🍰' },
   { id: 'Specials', label: 'Chef Specials', emoji: '⭐' },
 ]
 
 const STARTER_MENU_ITEMS: Omit<MenuItem, 'id' | 'business_id' | 'created_at' | 'updated_at' | 'sync_status' | 'device_id' | 'version'>[] = [
-  { name: 'Katogo (Matooke & Beef)', category: 'Breakfast', price: 7000, description: 'Fresh green matooke steamed with tender beef gravy', is_available: true },
+  // Drinks & Juices
+  { name: 'Fresh Passion Juice (Glass)', category: 'Drinks & Juices', price: 4000, description: '100% natural cold freshly squeezed passion fruit juice', is_available: true },
+  { name: 'Fresh Mango Juice (Glass)', category: 'Drinks & Juices', price: 4500, description: 'Chilled thick fresh blended mango juice', is_available: true },
+  { name: 'Fresh Cocktail Juice (Glass)', category: 'Drinks & Juices', price: 5000, description: 'Blend of passion, mango, pineapple, and watermelon', is_available: true },
+  { name: 'African Spiced Milk Tea', category: 'Drinks & Juices', price: 3000, description: 'Hot brewed with fresh ginger, cinnamon, cloves, and milk', is_available: true },
+  { name: 'Black Coffee / Lemon Tea', category: 'Drinks & Juices', price: 2500, description: 'Freshly brewed hot coffee or spiced black tea with lemon', is_available: true },
+  { name: 'Assorted Soda 300ml Glass', category: 'Drinks & Juices', price: 2000, description: 'Coca-Cola, Fanta, Sprite, Stoney, Novida', is_available: true },
+  { name: 'Mineral Water 500ml', category: 'Drinks & Juices', price: 1500, description: 'Chilled premium bottled drinking water', is_available: true },
+  { name: 'Cold Beer / Cider', category: 'Drinks & Juices', price: 5000, description: 'Nile Special, Club Pilsener, Bell, Tusker, Savanna', is_available: true },
+
+  // Breakfast
+  { name: 'Katogo (Matooke & Beef Gravy)', category: 'Breakfast', price: 7000, description: 'Fresh green matooke steamed with tender beef gravy', is_available: true },
   { name: 'Rolex (2 Eggs + Chapati)', category: 'Breakfast', price: 3500, description: 'Fried vegetable eggs rolled in fresh hot chapati', is_available: true },
-  { name: 'African Spiced Milk Tea', category: 'Beverages', price: 3000, description: 'Brewed with fresh ginger, cinnamon, and fresh milk', is_available: true },
+  { name: 'Spanish Omelette & Toast', category: 'Breakfast', price: 5000, description: '2 eggs with tomatoes, onions, green peppers and buttered toast', is_available: true },
+
+  // Main Dishes
   { name: 'Beef Luwombo with Matooke', category: 'Main Dishes', price: 18000, description: 'Slow-cooked seasoned beef in wrapped banana leaves', is_available: true },
   { name: 'Chicken Luwombo with Rice', category: 'Main Dishes', price: 20000, description: 'Tender local chicken steamed in fragrant banana leaf', is_available: true },
-  { name: 'Chips & Fried Chicken', category: 'Fast Food', price: 15000, description: 'Crispy golden french fries served with quarter fried chicken', is_available: true },
+  { name: 'Whole Deep Fried Tilapia Fish', category: 'Main Dishes', price: 25000, description: 'Fresh Lake Victoria tilapia served with chips or matooke', is_available: true },
   { name: 'Beef Pilau Rice', category: 'Main Dishes', price: 12000, description: 'Fragrant spiced basmati rice cooked with seasoned beef chunks', is_available: true },
-  { name: 'Fresh Passion Juice 500ml', category: 'Beverages', price: 4000, description: 'Freshly squeezed natural passion fruit juice', is_available: true },
-  { name: 'Mineral Water 500ml', category: 'Beverages', price: 1500, description: 'Chilled premium bottled drinking water', is_available: true },
-  { name: 'Assorted Soda 300ml Glass', category: 'Beverages', price: 2000, description: 'Coca-Cola, Fanta, Sprite, or Stoney', is_available: true },
+  { name: 'Goat Meat Stew with Rice', category: 'Main Dishes', price: 15000, description: 'Tender goat meat in rich tomato gravy with steamed rice', is_available: true },
+
+  // Fast Food & Snacks
+  { name: 'Chips & Quarter Fried Chicken', category: 'Fast Food', price: 15000, description: 'Crispy golden french fries served with seasoned fried chicken', is_available: true },
+  { name: 'Beef Burger with Chips', category: 'Fast Food', price: 16000, description: 'Grilled beef patty, cheese, lettuce, and crispy fries', is_available: true },
   { name: 'Beef Samosas (Pair of 2)', category: 'Snacks', price: 3000, description: 'Crispy deep-fried pastry filled with spiced minced meat', is_available: true },
+  { name: 'Chicken Spring Rolls (Pair of 2)', category: 'Snacks', price: 3500, description: 'Golden pastry filled with shredded chicken and vegetables', is_available: true },
 ]
 
 export default function RestaurantMenuPage() {

@@ -89,12 +89,13 @@ export async function recordOrderAsSale(
 
   await db.sales.add(newSale)
 
-  // Save Sale Items
+  // Save Sale Items (with business_id for Supabase RLS)
   if (items && items.length > 0) {
     for (const it of items) {
-      const saleItem: SaleItem = {
+      const saleItem: SaleItem & { business_id?: string } = {
         id: generateId(),
         sale_id: saleId,
+        business_id: order.business_id,
         name: it.name,
         quantity: it.qty,
         unit_price: it.price,
@@ -107,9 +108,10 @@ export async function recordOrderAsSale(
     // Look up items from db.orderItems
     const orderItems = await db.orderItems.where('order_id').equals(order.id).toArray()
     for (const it of orderItems) {
-      const saleItem: SaleItem = {
+      const saleItem: SaleItem & { business_id?: string } = {
         id: generateId(),
         sale_id: saleId,
+        business_id: order.business_id,
         name: it.name,
         quantity: it.quantity,
         unit_price: it.price,

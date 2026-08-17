@@ -1,6 +1,6 @@
 // Sync Engine — Comprehensive multi-device synchronization for Zentra
-// Synchronizes businesses, products, sales, sale_items, menu_items, orders, order_items,
-// expenses, customers, cash transactions, transport, mobile money, and clinic data with Supabase.
+// Synchronizes ALL data across devices: menu_items, orders, order_items, 
+// sales, sale_items, products, expenses, customers, cashbook, clinic data.
 
 import { db } from '@/database/dexie'
 import { supabase, isSupabaseConfigured } from '@/services/supabase/client'
@@ -9,7 +9,16 @@ import { resolveConflict } from './conflictResolver'
 import { useSyncStore } from '@/stores/syncStore'
 import type { Table } from 'dexie'
 
-const LAST_SYNC_KEY = 'zentra_last_sync_at'
+// Per-business sync key so each business has its own last-sync timestamp
+function getLastSyncKey(businessId: string) {
+  return `zentra_last_sync_${businessId}`
+}
+function getLastSyncAt(businessId: string): number {
+  return parseInt(localStorage.getItem(getLastSyncKey(businessId)) || '0', 10)
+}
+function setLastSyncAt(businessId: string, ts: number): void {
+  localStorage.setItem(getLastSyncKey(businessId), ts.toString())
+}
 
 interface SyncMapping {
   name: string
@@ -18,7 +27,7 @@ interface SyncMapping {
   getTable: () => Table<any, any>
 }
 
-// Parent tables directly scoped by business_id or id
+// All parent tables scoped directly by business_id or id
 const SYNC_TABLES: SyncMapping[] = [
   { name: 'businesses',                supabase: 'businesses',                filterField: 'id',          getTable: () => db.businesses },
   { name: 'products',                  supabase: 'products',                  filterField: 'business_id', getTable: () => db.products },
@@ -41,14 +50,7 @@ const SYNC_TABLES: SyncMapping[] = [
 
 let isSyncing = false
 
-function getLastSyncAt(): number {
-  return parseInt(localStorage.getItem(LAST_SYNC_KEY) || '0', 10)
-}
-function setLastSyncAt(ts: number): void {
-  localStorage.setItem(LAST_SYNC_KEY, ts.toString())
-}
-
-// ─── Timestamps Normalization ────────────────────────────────────────────────
+// ─── Timestamp Normalization ─────────────────────────────────────────────────
 const TS_FIELDS = [
   'created_at', 'updated_at', 'synced_at', 'deleted_at',
   'subscription_expires_at', 'expiry_date', 'sale_date', 'visit_date', 'dispensed_at'
@@ -69,22 +71,47 @@ export function normalizeForSupabase(record: Record<string, any>): Record<string
 export function normalizeFromSupabase(record: Record<string, any>): Record<string, any> {
   const result = { ...record }
   for (const field of TS_FIELDS) {
-    if (result[field] && typeof result[field] === 'string') {
-      const parsed = Date.parse(result[field])
-      if (!isNaN(parsed)) result[field] = parsed
+    if (result[field]) {
+      if (typeof result[field] === 'string') {
+        const parsed = Date.parse(result[field])
+        if (!isNaN(parsed)) result[field] = parsed
+      }
+      // If already a number (BIGINT stored as ms), keep it
     }
   }
   return result
 }
 
-// ─── Push Dirty Records ───────────────────────────────────────────────────────
+// ─── Helper: Push a single record to Supabase ────────────────────────────────
+async function pushRecord(tableName: string, record: Record<string, any>): Promise<boolean> {
+  try {
+    if (record.deleted_at) {
+      await supabase.from(tableName).delete().eq('id', record.id)
+    } else {
+      const normalized = normalizeForSupabase(record)
+      const { error } = await supabase
+        .from(tableName)
+        .upsert({ ...normalized, sync_status: 'synced', synced_at: new Date().toISOString() }, { onConflict: 'id' })
+      if (error) {
+        console.warn(`[SyncEngine] Upsert error on ${tableName}/${record.id}:`, error.message)
+        return false
+      }
+    }
+    return true
+  } catch (err) {
+    console.warn(`[SyncEngine] pushRecord failed ${tableName}/${record.id}:`, err)
+    return false
+  }
+}
+
+// ─── Push ALL Dirty Records ───────────────────────────────────────────────────
 async function pushDirty(businessId: string): Promise<void> {
   // 1. Push parent tables
   for (const table of SYNC_TABLES) {
     const dexieTable = table.getTable()
     if (!dexieTable) continue
 
-    let dirty
+    let dirty: any[]
     try {
       dirty = await dexieTable
         .where('sync_status').anyOf(['pending', 'failed'])
@@ -98,94 +125,73 @@ async function pushDirty(businessId: string): Promise<void> {
     }
 
     for (const record of dirty) {
-      try {
-        if (record.deleted_at) {
-          await supabase.from(table.supabase).delete().eq('id', record.id)
-        } else {
-          const normalized = normalizeForSupabase(record)
-          const { error } = await supabase
-            .from(table.supabase)
-            .upsert({ ...normalized, sync_status: 'synced', synced_at: new Date().toISOString() }, { onConflict: 'id' })
-          if (error) throw error
-        }
-
-        await dexieTable.update(record.id, {
-          sync_status: 'synced',
-          synced_at: Date.now(),
-        })
-      } catch (err) {
+      const ok = await pushRecord(table.supabase, record)
+      if (ok) {
+        await dexieTable.update(record.id, { sync_status: 'synced', synced_at: Date.now() })
+      } else {
         await dexieTable.update(record.id, { sync_status: 'failed' })
-        console.warn(`[SyncEngine] Failed to push ${table.name}/${record.id}:`, err)
       }
     }
   }
 
-  // 2. Push Child Table: sale_items (belongs to business sales)
+  // 2. Push sale_items (child of sales)
   try {
     const businessSales = await db.sales.where('business_id').equals(businessId).toArray()
-    const saleIds = businessSales.map(s => s.id)
-    if (saleIds.length > 0) {
-      const dirtySaleItems = await db.saleItems
-        .filter(si => saleIds.includes(si.sale_id))
-        .toArray()
-
-      for (const item of dirtySaleItems) {
-        try {
-          await supabase.from('sale_items').upsert(item, { onConflict: 'id' })
-        } catch (err) {
-          console.warn('[SyncEngine] Failed to push sale_item:', item.id, err)
-        }
+    const saleIds = new Set(businessSales.map(s => s.id))
+    if (saleIds.size > 0) {
+      // Get ALL sale items, not just pending, since they have no sync_status
+      const allSaleItems = await db.saleItems.filter(si => saleIds.has(si.sale_id)).toArray()
+      for (const item of allSaleItems) {
+        const { error } = await supabase
+          .from('sale_items')
+          .upsert(item, { onConflict: 'id' })
+        if (error) console.warn('[SyncEngine] Failed to push sale_item:', item.id, error.message)
       }
     }
   } catch (err) {
-    console.warn('[SyncEngine] Failed to process sale_items push:', err)
+    console.warn('[SyncEngine] Failed to push sale_items:', err)
   }
 
-  // 3. Push Child Table: order_items (belongs to business orders)
+  // 3. Push order_items (child of orders)
   try {
     const businessOrders = await db.orders.where('business_id').equals(businessId).toArray()
-    const orderIds = businessOrders.map(o => o.id)
-    if (orderIds.length > 0) {
-      const dirtyOrderItems = await db.orderItems
-        .filter(oi => orderIds.includes(oi.order_id))
-        .toArray()
-
-      for (const item of dirtyOrderItems) {
-        try {
-          await supabase.from('order_items').upsert(item, { onConflict: 'id' })
-        } catch (err) {
-          console.warn('[SyncEngine] Failed to push order_item:', item.id, err)
-        }
+    const orderIds = new Set(businessOrders.map(o => o.id))
+    if (orderIds.size > 0) {
+      const allOrderItems = await db.orderItems.filter(oi => orderIds.has(oi.order_id)).toArray()
+      for (const item of allOrderItems) {
+        const { error } = await supabase
+          .from('order_items')
+          .upsert(item, { onConflict: 'id' })
+        if (error) console.warn('[SyncEngine] Failed to push order_item:', item.id, error.message)
       }
     }
   } catch (err) {
-    console.warn('[SyncEngine] Failed to process order_items push:', err)
+    console.warn('[SyncEngine] Failed to push order_items:', err)
   }
 }
 
-// ─── Pull Remote Records ──────────────────────────────────────────────────────
+// ─── Pull Remote (Incremental) ────────────────────────────────────────────────
 async function pullRemote(businessId: string): Promise<void> {
-  const lastSync = getLastSyncAt()
-  const isInitialPull = lastSync === 0
+  const lastSync = getLastSyncAt(businessId)
 
-  // 1. Pull Parent tables
   for (const table of SYNC_TABLES) {
     const dexieTable = table.getTable()
     if (!dexieTable) continue
 
     try {
       let query = supabase.from(table.supabase).select('*').eq(table.filterField, businessId)
-      if (!isInitialPull) {
+      if (lastSync > 0) {
         const lastSyncIso = new Date(lastSync).toISOString()
-        query = query.gt('updated_at', lastSyncIso)
+        query = query.gte('updated_at', lastSyncIso)
       }
 
       const { data, error } = await query
 
-      if (error || !data) {
-        if (error) console.warn(`[SyncEngine] Pull error on ${table.name}:`, error.message)
+      if (error) {
+        console.warn(`[SyncEngine] Pull error on ${table.name}:`, error.message)
         continue
       }
+      if (!data || data.length === 0) continue
 
       for (const remote of data) {
         const normalized = normalizeFromSupabase(remote)
@@ -194,9 +200,12 @@ async function pullRemote(businessId: string): Promise<void> {
         if (!local) {
           await dexieTable.put({ ...normalized, sync_status: 'synced' })
         } else {
+          const remoteUpdatedAt = typeof remote.updated_at === 'string'
+            ? new Date(remote.updated_at).getTime()
+            : (remote.updated_at || 0)
           const winner = resolveConflict(
-            { id: local.id, updated_at: local.updated_at, version: local.version || 1 },
-            { id: remote.id, updated_at: typeof remote.updated_at === 'string' ? new Date(remote.updated_at).getTime() : remote.updated_at, version: remote.version || 1 },
+            { id: local.id, updated_at: local.updated_at || 0, version: local.version || 1 },
+            { id: remote.id, updated_at: remoteUpdatedAt, version: remote.version || 1 },
             table.name
           )
           if (winner === 'remote') {
@@ -209,17 +218,22 @@ async function pullRemote(businessId: string): Promise<void> {
     }
   }
 
-  // 2. Pull Child Tables: sale_items & order_items
+  // Pull child items for any newly-downloaded parents
+  await pullChildItems(businessId)
+}
+
+// ─── Pull child items (sale_items, order_items) ───────────────────────────────
+async function pullChildItems(businessId: string): Promise<void> {
+  // Pull sale_items
   try {
     const localSales = await db.sales.where('business_id').equals(businessId).toArray()
     const saleIds = localSales.map(s => s.id)
     if (saleIds.length > 0) {
-      // Chunk in groups of 100 to avoid query size limits
-      for (let i = 0; i < saleIds.length; i += 100) {
-        const chunk = saleIds.slice(i, i + 100)
-        const { data: remoteSaleItems } = await supabase.from('sale_items').select('*').in('sale_id', chunk)
-        if (remoteSaleItems) {
-          for (const item of remoteSaleItems) {
+      for (let i = 0; i < saleIds.length; i += 50) {
+        const chunk = saleIds.slice(i, i + 50)
+        const { data } = await supabase.from('sale_items').select('*').in('sale_id', chunk)
+        if (data) {
+          for (const item of data) {
             await db.saleItems.put(item)
           }
         }
@@ -229,15 +243,16 @@ async function pullRemote(businessId: string): Promise<void> {
     console.warn('[SyncEngine] Failed to pull sale_items:', err)
   }
 
+  // Pull order_items
   try {
     const localOrders = await db.orders.where('business_id').equals(businessId).toArray()
     const orderIds = localOrders.map(o => o.id)
     if (orderIds.length > 0) {
-      for (let i = 0; i < orderIds.length; i += 100) {
-        const chunk = orderIds.slice(i, i + 100)
-        const { data: remoteOrderItems } = await supabase.from('order_items').select('*').in('order_id', chunk)
-        if (remoteOrderItems) {
-          for (const item of remoteOrderItems) {
+      for (let i = 0; i < orderIds.length; i += 50) {
+        const chunk = orderIds.slice(i, i + 50)
+        const { data } = await supabase.from('order_items').select('*').in('order_id', chunk)
+        if (data) {
+          for (const item of data) {
             await db.orderItems.put(item)
           }
         }
@@ -248,12 +263,13 @@ async function pullRemote(businessId: string): Promise<void> {
   }
 }
 
-// ─── Full Pull For Device Sync & First Login ─────────────────────────────────
+// ─── Full Pull (initial device setup, or forced refresh) ────────────────────
 export async function fullPullFromSupabase(businessId: string): Promise<void> {
   if (!isSupabaseConfigured || !getIsOnline()) return
 
+  console.log('[SyncEngine] Full pull starting for', businessId)
   try {
-    // 1. Pull the business record itself
+    // 1. Pull business record
     const { data: bizData } = await supabase
       .from('businesses')
       .select('*')
@@ -277,54 +293,35 @@ export async function fullPullFromSupabase(businessId: string): Promise<void> {
           .select('*')
           .eq('business_id', businessId)
 
-        if (error || !data) continue
+        if (error) {
+          console.warn(`[SyncEngine] Full pull error on ${table.name}:`, error.message)
+          continue
+        }
+        if (!data || data.length === 0) continue
 
         for (const remote of data) {
           const normalized = normalizeFromSupabase(remote)
           await dexieTable.put({ ...normalized, sync_status: 'synced' })
         }
+
+        console.log(`[SyncEngine] Full pulled ${data.length} records from ${table.name}`)
       } catch (err) {
-        console.warn(`[SyncEngine] Full-pull failed for ${table.name}:`, err)
+        console.warn(`[SyncEngine] Full pull failed for ${table.name}:`, err)
       }
     }
 
-    // 3. Pull all sale_items for downloaded sales
-    const sales = await db.sales.where('business_id').equals(businessId).toArray()
-    const saleIds = sales.map(s => s.id)
-    if (saleIds.length > 0) {
-      for (let i = 0; i < saleIds.length; i += 100) {
-        const chunk = saleIds.slice(i, i + 100)
-        const { data: remoteSaleItems } = await supabase.from('sale_items').select('*').in('sale_id', chunk)
-        if (remoteSaleItems) {
-          for (const item of remoteSaleItems) {
-            await db.saleItems.put(item)
-          }
-        }
-      }
-    }
+    // 3. Pull all sale_items and order_items
+    await pullChildItems(businessId)
 
-    // 4. Pull all order_items for downloaded orders
-    const orders = await db.orders.where('business_id').equals(businessId).toArray()
-    const orderIds = orders.map(o => o.id)
-    if (orderIds.length > 0) {
-      for (let i = 0; i < orderIds.length; i += 100) {
-        const chunk = orderIds.slice(i, i + 100)
-        const { data: remoteOrderItems } = await supabase.from('order_items').select('*').in('order_id', chunk)
-        if (remoteOrderItems) {
-          for (const item of remoteOrderItems) {
-            await db.orderItems.put(item)
-          }
-        }
-      }
-    }
-
-    setLastSyncAt(Date.now())
+    // Mark sync timestamp so next poll is incremental
+    setLastSyncAt(businessId, Date.now())
+    console.log('[SyncEngine] Full pull complete for', businessId)
   } catch (err) {
     console.error('[SyncEngine] Full pull failed:', err)
   }
 }
 
-// ─── Pull user businesses (Used at login to seed Dexie) ──────────────────────
+// ─── Pull user businesses (used at login) ────────────────────────────────────
 export async function pullUserBusinesses(userId: string): Promise<import('@/types/business').Business[]> {
   if (!isSupabaseConfigured || !getIsOnline()) return []
 
@@ -341,10 +338,13 @@ export async function pullUserBusinesses(userId: string): Promise<import('@/type
       const normalized = normalizeFromSupabase(remote)
       await db.businesses.put({ ...normalized, sync_status: 'synced' } as any)
       list.push(normalized as import('@/types/business').Business)
-
-      // Automatically full-pull data for this business
-      await fullPullFromSupabase(remote.id)
     }
+
+    // Full pull for each business — downloads menus, orders, sales, etc.
+    for (const biz of list) {
+      await fullPullFromSupabase(biz.id)
+    }
+
     return list
   } catch (err) {
     console.warn('[SyncEngine] Failed to pull user businesses:', err)
@@ -363,7 +363,7 @@ export async function runSync(businessId: string): Promise<void> {
   try {
     await pushDirty(businessId)
     await pullRemote(businessId)
-    setLastSyncAt(Date.now())
+    setLastSyncAt(businessId, Date.now())
     store.setStatus('synced')
     store.setLastSyncAt(Date.now())
   } catch (err) {
@@ -374,27 +374,40 @@ export async function runSync(businessId: string): Promise<void> {
   }
 }
 
-// ─── Auto-sync on reconnect & periodic polling ────────────────────────────────
+// ─── Auto-sync on reconnect & polling ────────────────────────────────────────
 let currentBusinessId: string | null = null
 let syncInterval: ReturnType<typeof setInterval> | null = null
 
 export function startSyncEngine(businessId: string): () => void {
   currentBusinessId = businessId
 
+  // Reset last sync for this business so we do a full pull on reconnect if it's been long
+  const lastSync = getLastSyncAt(businessId)
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+  if (lastSync < fiveMinutesAgo) {
+    // Force a full pull to catch any data added on other devices
+    console.log('[SyncEngine] Last sync was long ago, doing full pull first')
+    if (getIsOnline()) {
+      fullPullFromSupabase(businessId).catch(console.error)
+    }
+  }
+
   const cleanup = onConnectivityChange(async (online) => {
     if (online && currentBusinessId) {
+      // On reconnect do a full pull to catch anything missed while offline
+      await fullPullFromSupabase(currentBusinessId)
       await runSync(currentBusinessId)
     } else if (!online) {
       useSyncStore.getState().setStatus('offline')
     }
   })
 
-  // Sync every 30 seconds for fast multi-device updates
+  // Sync every 15 seconds for near-realtime multi-device updates
   syncInterval = setInterval(() => {
     if (getIsOnline() && currentBusinessId) {
       runSync(currentBusinessId)
     }
-  }, 30_000)
+  }, 15_000)
 
   // Initial sync on start
   if (getIsOnline()) {

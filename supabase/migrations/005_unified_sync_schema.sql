@@ -1,145 +1,195 @@
--- ==========================================================
--- Zentra PostgreSQL Migration (v5) — Unified Multi-Device Sync
--- Ensures all tables, timestamps, and child item RLS policies 
--- work smoothly across all devices (Menu, Sales, Orders, Clinic)
--- ==========================================================
+-- ================================================================
+-- Zentra Migration v005 — Multi-Device Sync Fix
+-- Adds business_id to child tables (order_items, sale_items)
+-- and fixes RLS policies for full multi-device sync.
+-- All operations are safe to re-run — fully wrapped in IF EXISTS.
+-- NOTE: Requires migration 004 to have been run first.
+-- ================================================================
 
--- 1. CONVERT CLINIC & RESTAURANT TIMESTAMPS TO TIMESTAMPTZ (IF BIGINT)
+-- ── 1. Add business_id to order_items ───────────────────────────
 DO $$
 BEGIN
-  -- menu_items
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'menu_items' AND column_name = 'created_at' AND data_type = 'bigint'
-  ) THEN
-    ALTER TABLE menu_items 
-      ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at / 1000.0),
-      ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING to_timestamp(updated_at / 1000.0),
-      ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING CASE WHEN deleted_at IS NOT NULL THEN to_timestamp(deleted_at / 1000.0) ELSE NULL END,
-      ALTER COLUMN synced_at TYPE TIMESTAMPTZ USING CASE WHEN synced_at IS NOT NULL THEN to_timestamp(synced_at / 1000.0) ELSE NULL END;
-  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'order_items') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'order_items' AND column_name = 'business_id'
+    ) THEN
+      ALTER TABLE order_items
+        ADD COLUMN business_id UUID REFERENCES businesses(id) ON DELETE CASCADE;
 
-  -- orders
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'orders' AND column_name = 'created_at' AND data_type = 'bigint'
-  ) THEN
-    ALTER TABLE orders 
-      ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at / 1000.0),
-      ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING to_timestamp(updated_at / 1000.0),
-      ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING CASE WHEN deleted_at IS NOT NULL THEN to_timestamp(deleted_at / 1000.0) ELSE NULL END,
-      ALTER COLUMN synced_at TYPE TIMESTAMPTZ USING CASE WHEN synced_at IS NOT NULL THEN to_timestamp(synced_at / 1000.0) ELSE NULL END;
-  END IF;
-
-  -- patients
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'patients' AND column_name = 'created_at' AND data_type = 'bigint'
-  ) THEN
-    ALTER TABLE patients 
-      ALTER COLUMN created_at TYPE TIMESTAMPTZ USING to_timestamp(created_at / 1000.0),
-      ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING to_timestamp(updated_at / 1000.0),
-      ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING CASE WHEN deleted_at IS NOT NULL THEN to_timestamp(deleted_at / 1000.0) ELSE NULL END,
-      ALTER COLUMN synced_at TYPE TIMESTAMPTZ USING CASE WHEN synced_at IS NOT NULL THEN to_timestamp(synced_at / 1000.0) ELSE NULL END;
+      UPDATE order_items oi
+      SET business_id = o.business_id
+      FROM orders o
+      WHERE oi.order_id = o.id;
+    END IF;
   END IF;
 END $$;
 
--- 2. ENSURE RLS IS CONFIGURED FOR SALE_ITEMS & ORDER_ITEMS
-ALTER TABLE IF EXISTS sale_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS order_items ENABLE ROW LEVEL SECURITY;
+-- ── 2. Add business_id to sale_items ────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sale_items') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'sale_items' AND column_name = 'business_id'
+    ) THEN
+      ALTER TABLE sale_items
+        ADD COLUMN business_id UUID REFERENCES businesses(id) ON DELETE CASCADE;
 
-DROP POLICY IF EXISTS "Sale items select" ON sale_items;
-DROP POLICY IF EXISTS "Sale items insert" ON sale_items;
-DROP POLICY IF EXISTS "Sale items update" ON sale_items;
-DROP POLICY IF EXISTS "Sale items delete" ON sale_items;
+      UPDATE sale_items si
+      SET business_id = s.business_id
+      FROM sales s
+      WHERE si.sale_id = s.id;
+    END IF;
+  END IF;
+END $$;
 
-CREATE POLICY "Sale items select" ON sale_items
-  FOR SELECT USING (
-    sale_id IN (
-      SELECT id FROM sales WHERE user_belongs_to_business(business_id)
-    )
-  );
+-- ── 3. sale_items RLS ────────────────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sale_items') THEN
+    ALTER TABLE sale_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Sale items insert" ON sale_items
-  FOR INSERT WITH CHECK (
-    sale_id IN (
-      SELECT id FROM sales WHERE user_belongs_to_business(business_id)
-    )
-  );
+    DROP POLICY IF EXISTS "Sale items select"                     ON sale_items;
+    DROP POLICY IF EXISTS "Sale items insert"                     ON sale_items;
+    DROP POLICY IF EXISTS "Sale items update"                     ON sale_items;
+    DROP POLICY IF EXISTS "Sale items delete"                     ON sale_items;
+    DROP POLICY IF EXISTS "Business members select sale_items"    ON sale_items;
+    DROP POLICY IF EXISTS "Business members insert sale_items"    ON sale_items;
+    DROP POLICY IF EXISTS "Business members update sale_items"    ON sale_items;
 
-CREATE POLICY "Sale items update" ON sale_items
-  FOR UPDATE USING (
-    sale_id IN (
-      SELECT id FROM sales WHERE user_belongs_to_business(business_id)
-    )
-  );
+    EXECUTE $pol$
+      CREATE POLICY "Sale items select" ON sale_items FOR SELECT USING (
+        sale_id IN (SELECT id FROM sales WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Sale items insert" ON sale_items FOR INSERT WITH CHECK (
+        sale_id IN (SELECT id FROM sales WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Sale items update" ON sale_items FOR UPDATE USING (
+        sale_id IN (SELECT id FROM sales WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Sale items delete" ON sale_items FOR DELETE USING (
+        sale_id IN (SELECT id FROM sales WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+    $pol$;
+  END IF;
+END $$;
 
-CREATE POLICY "Sale items delete" ON sale_items
-  FOR DELETE USING (
-    sale_id IN (
-      SELECT id FROM sales WHERE user_belongs_to_business(business_id)
-    )
-  );
+-- ── 4. order_items RLS ───────────────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'order_items') THEN
+    DROP POLICY IF EXISTS order_items_owner         ON order_items;
+    DROP POLICY IF EXISTS "Order items select"      ON order_items;
+    DROP POLICY IF EXISTS "Order items insert"      ON order_items;
+    DROP POLICY IF EXISTS "Order items update"      ON order_items;
+    DROP POLICY IF EXISTS "Order items delete"      ON order_items;
 
--- Order items policies
-DROP POLICY IF EXISTS "Order items select" ON order_items;
-DROP POLICY IF EXISTS "Order items insert" ON order_items;
-DROP POLICY IF EXISTS "Order items update" ON order_items;
-DROP POLICY IF EXISTS "Order items delete" ON order_items;
+    EXECUTE $pol$
+      CREATE POLICY "Order items select" ON order_items FOR SELECT USING (
+        order_id IN (SELECT id FROM orders WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Order items insert" ON order_items FOR INSERT WITH CHECK (
+        order_id IN (SELECT id FROM orders WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Order items update" ON order_items FOR UPDATE USING (
+        order_id IN (SELECT id FROM orders WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+      CREATE POLICY "Order items delete" ON order_items FOR DELETE USING (
+        order_id IN (SELECT id FROM orders WHERE business_id IN (
+          SELECT id FROM businesses WHERE owner_id = auth.uid()
+        ))
+      );
+    $pol$;
+  END IF;
+END $$;
 
-CREATE POLICY "Order items select" ON order_items
-  FOR SELECT USING (
-    order_id IN (
-      SELECT id FROM orders WHERE user_belongs_to_business(business_id)
-    )
-  );
+-- ── 5. menu_items RLS ────────────────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_items') THEN
+    DROP POLICY IF EXISTS menu_items_owner         ON menu_items;
+    DROP POLICY IF EXISTS "Menu items select"      ON menu_items;
+    DROP POLICY IF EXISTS "Menu items insert"      ON menu_items;
+    DROP POLICY IF EXISTS "Menu items update"      ON menu_items;
+    DROP POLICY IF EXISTS "Menu items delete"      ON menu_items;
 
-CREATE POLICY "Order items insert" ON order_items
-  FOR INSERT WITH CHECK (
-    order_id IN (
-      SELECT id FROM orders WHERE user_belongs_to_business(business_id)
-    )
-  );
+    EXECUTE $pol$
+      CREATE POLICY "Menu items select" ON menu_items FOR SELECT USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Menu items insert" ON menu_items FOR INSERT WITH CHECK (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Menu items update" ON menu_items FOR UPDATE USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Menu items delete" ON menu_items FOR DELETE USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+    $pol$;
+  END IF;
+END $$;
 
-CREATE POLICY "Order items update" ON order_items
-  FOR UPDATE USING (
-    order_id IN (
-      SELECT id FROM orders WHERE user_belongs_to_business(business_id)
-    )
-  );
+-- ── 6. orders RLS ────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'orders') THEN
+    DROP POLICY IF EXISTS orders_owner        ON orders;
+    DROP POLICY IF EXISTS "Orders select"     ON orders;
+    DROP POLICY IF EXISTS "Orders insert"     ON orders;
+    DROP POLICY IF EXISTS "Orders update"     ON orders;
+    DROP POLICY IF EXISTS "Orders delete"     ON orders;
 
-CREATE POLICY "Order items delete" ON order_items
-  FOR DELETE USING (
-    order_id IN (
-      SELECT id FROM orders WHERE user_belongs_to_business(business_id)
-    )
-  );
+    EXECUTE $pol$
+      CREATE POLICY "Orders select" ON orders FOR SELECT USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Orders insert" ON orders FOR INSERT WITH CHECK (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Orders update" ON orders FOR UPDATE USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+      CREATE POLICY "Orders delete" ON orders FOR DELETE USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = auth.uid())
+      );
+    $pol$;
+  END IF;
+END $$;
 
--- 3. ENSURE RLS POLICIES FOR MENU_ITEMS & ORDERS
-DROP POLICY IF EXISTS "Menu items select" ON menu_items;
-DROP POLICY IF EXISTS "Menu items insert" ON menu_items;
-DROP POLICY IF EXISTS "Menu items update" ON menu_items;
-DROP POLICY IF EXISTS "Menu items delete" ON menu_items;
-
-CREATE POLICY "Menu items select" ON menu_items
-  FOR SELECT USING (user_belongs_to_business(business_id));
-CREATE POLICY "Menu items insert" ON menu_items
-  FOR INSERT WITH CHECK (user_belongs_to_business(business_id));
-CREATE POLICY "Menu items update" ON menu_items
-  FOR UPDATE USING (user_belongs_to_business(business_id));
-CREATE POLICY "Menu items delete" ON menu_items
-  FOR DELETE USING (user_belongs_to_business(business_id));
-
-DROP POLICY IF EXISTS "Orders select" ON orders;
-DROP POLICY IF EXISTS "Orders insert" ON orders;
-DROP POLICY IF EXISTS "Orders update" ON orders;
-DROP POLICY IF EXISTS "Orders delete" ON orders;
-
-CREATE POLICY "Orders select" ON orders
-  FOR SELECT USING (user_belongs_to_business(business_id));
-CREATE POLICY "Orders insert" ON orders
-  FOR INSERT WITH CHECK (user_belongs_to_business(business_id));
-CREATE POLICY "Orders update" ON orders
-  FOR UPDATE USING (user_belongs_to_business(business_id));
-CREATE POLICY "Orders delete" ON orders
-  FOR DELETE USING (user_belongs_to_business(business_id));
+-- ── 7. Indexes (safe — IF NOT EXISTS) ────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'order_items') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_order_items_business ON order_items(business_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_order_items_order    ON order_items(order_id)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sale_items') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_sale_items_business  ON sale_items(business_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_sale_items_sale      ON sale_items(sale_id)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sales') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_sales_biz_updated    ON sales(business_id, updated_at)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'orders') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_orders_biz_updated   ON orders(business_id, updated_at)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_items') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_menu_items_updated   ON menu_items(business_id, updated_at)';
+  END IF;
+END $$;
