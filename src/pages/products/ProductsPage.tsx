@@ -181,6 +181,11 @@ export default function ProductsPage() {
 
     setShowModal(false)
     setLoading(false)
+
+    if (activeBusiness?.id) {
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
+    }
   }
 
   async function handleSaveRestock(e: React.FormEvent) {
@@ -224,6 +229,11 @@ export default function ProductsPage() {
 
     setLoading(false)
     setShowRestockModal(false)
+
+    if (activeBusiness?.id) {
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
+    }
   }
 
   async function handleQuickAdjustQty(prod: Product, delta: number, e: React.MouseEvent) {
@@ -234,6 +244,10 @@ export default function ProductsPage() {
       updated_at: Date.now(),
       sync_status: 'pending',
     })
+    if (activeBusiness?.id) {
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
+    }
   }
 
   async function handleDeleteProduct(id: string) {
@@ -242,6 +256,10 @@ export default function ProductsPage() {
         deleted_at: Date.now(),
         sync_status: 'pending',
       })
+      if (activeBusiness?.id) {
+        const { runSync } = await import('@/services/sync/syncEngine')
+        runSync(activeBusiness.id).catch(console.error)
+      }
     }
   }
 
@@ -273,6 +291,11 @@ export default function ProductsPage() {
 
     setLoading(false)
     setShowPresetModal(false)
+
+    if (activeBusiness?.id) {
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
+    }
   }
 
   return (

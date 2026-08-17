@@ -129,24 +129,34 @@ export default function RestaurantMenuPage() {
 
     setLoading(false)
     setShowModal(false)
+
+    // Trigger instant cloud sync
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
   }
 
   async function handleToggleAvailability(item: MenuItem, e: React.MouseEvent) {
     e.stopPropagation()
+    if (!activeBusiness) return
     await db.menuItems.update(item.id, {
       is_available: !item.is_available,
       updated_at: Date.now(),
       sync_status: 'pending',
     })
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
   }
 
   async function handleDeleteItem(id: string, e: React.MouseEvent) {
     e.stopPropagation()
+    if (!activeBusiness) return
     if (confirm('Are you sure you want to delete this menu item?')) {
       await db.menuItems.update(id, {
         deleted_at: Date.now(),
         sync_status: 'pending',
       })
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
     }
   }
 
@@ -173,6 +183,9 @@ export default function RestaurantMenuPage() {
 
     setLoading(false)
     setShowPresetConfirm(false)
+
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
   }
 
   return (

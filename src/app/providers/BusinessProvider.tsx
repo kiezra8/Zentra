@@ -41,17 +41,24 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       //    b) Otherwise pick the first one
       const persisted = activeBusiness
       const stillExists = persisted && businesses.some(b => b.id === persisted.id)
+      const targetBiz = (!stillExists && businesses.length > 0)
+        ? businesses[0]
+        : (stillExists ? persisted : (businesses[0] || null))
 
       if (!stillExists && businesses.length > 0) {
         setActiveBusiness(businesses[0])
       } else if (businesses.length === 0) {
         setActiveBusiness(null)
       }
-      // (if stillExists, no change needed — activeBusiness is already correct)
+
+      if (targetBiz) {
+        const { fullPullFromSupabase } = await import('@/services/sync/syncEngine')
+        await fullPullFromSupabase(targetBiz.id)
+      }
 
       // 4. Ensure any restaurant orders are synced to sales
       const { syncAllOrdersToSales } = await import('@/services/orderSaleSync')
-      await syncAllOrdersToSales()
+      await syncAllOrdersToSales(targetBiz?.id)
 
       setLoadingBusinesses(false)
     }

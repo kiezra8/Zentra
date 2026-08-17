@@ -140,6 +140,10 @@ export default function AddSalePage() {
     setSavedSale(sale)
     setSavedItems(itemsToSave)
     setLoading(false)
+
+    // Trigger instant cloud sync
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
   }
 
   return (

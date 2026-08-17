@@ -89,6 +89,10 @@ export default function NewOrderPage() {
     const { recordOrderAsSale } = await import('@/services/orderSaleSync')
     await recordOrderAsSale(order, cart.map(c => ({ name: c.name, price: c.price, qty: c.qty })))
 
+    // Trigger instant cloud sync
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
+
     setSaving(false)
     navigate('/restaurant/orders')
   }

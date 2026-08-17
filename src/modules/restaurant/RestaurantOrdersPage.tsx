@@ -50,6 +50,10 @@ export default function RestaurantOrdersPage() {
   async function updateStatus(orderId: string, status: OrderStatus) {
     await db.orders.update(orderId, { status, updated_at: Date.now(), sync_status: 'pending' })
     await updateOrderSaleStatus(orderId, status)
+    if (activeBusiness?.id) {
+      const { runSync } = await import('@/services/sync/syncEngine')
+      runSync(activeBusiness.id).catch(console.error)
+    }
   }
 
   async function handleCompletePayment() {
@@ -77,6 +81,10 @@ export default function RestaurantOrdersPage() {
 
     setLoading(false)
     setPayingOrder(null)
+
+    // Trigger instant cloud sync
+    const { runSync } = await import('@/services/sync/syncEngine')
+    runSync(activeBusiness.id).catch(console.error)
   }
 
   const orders = activeTab === 'active' ? activeOrders : paidOrders
