@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { BarChart3, TrendingUp, TrendingDown, Calendar, Download, Package } from 'lucide-react'
 import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency, formatCompact } from '@/utils/currency'
 import { startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
+import { syncAllOrdersToSales } from '@/services/orderSaleSync'
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'all'
 
@@ -18,6 +19,12 @@ function startOfYear(): number {
 export default function ReportsPage() {
   const { activeBusiness } = useBusinessStore()
   const [period, setPeriod] = useState<Period>('month')
+
+  useEffect(() => {
+    if (activeBusiness?.id) {
+      syncAllOrdersToSales(activeBusiness.id).catch(console.error)
+    }
+  }, [activeBusiness?.id])
 
   const rangeStart =
     period === 'today' ? startOfDay() :

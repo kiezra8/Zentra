@@ -1,15 +1,15 @@
 // Restaurant Orders Page — active orders management & sales recording
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { Plus, UtensilsCrossed, CheckCircle2, ChevronRight, CreditCard } from 'lucide-react'
-import { db, buildSyncMeta } from '@/database/dexie'
+import { Plus, UtensilsCrossed, CreditCard } from 'lucide-react'
+import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
 import { formatRelative } from '@/utils/date'
-import { generateId } from '@/utils/deviceId'
 import { PAYMENT_METHODS, type PaymentMethod } from '@/types/business'
-import type { Order, OrderStatus, Sale, SaleItem } from '@/types'
+import { recordOrderAsSale, updateOrderSaleStatus, syncAllOrdersToSales } from '@/services/orderSaleSync'
+import type { Order, OrderStatus } from '@/types'
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   open: 'var(--primary)',
@@ -25,6 +25,13 @@ export default function RestaurantOrdersPage() {
   const [payingOrder, setPayingOrder] = useState<Order | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [loading, setLoading] = useState(false)
+
+  // Ensure all existing and new orders are synced to Sales and Income on mount
+  useEffect(() => {
+    if (activeBusiness?.id) {
+      syncAllOrdersToSales(activeBusiness.id).catch(console.error)
+    }
+  }, [activeBusiness?.id])
 
   const activeOrders = useLiveQuery(async () => {
     if (!activeBusiness) return []
@@ -42,6 +49,7 @@ export default function RestaurantOrdersPage() {
 
   async function updateStatus(orderId: string, status: OrderStatus) {
     await db.orders.update(orderId, { status, updated_at: Date.now(), sync_status: 'pending' })
+    await updateOrderSaleStatus(orderId, status)
   }
 
   async function handleCompletePayment() {
@@ -57,46 +65,15 @@ export default function RestaurantOrdersPage() {
       sync_status: 'pending',
     })
 
-    // 2. Query items for this order
-    const orderItems = await db.orderItems.where('order_id').equals(payingOrder.id).toArray()
-
-    // 3. Create Sale record in db.sales
-    const saleId = generateId()
-    const orderLabel = payingOrder.table_no
-      ? `Table ${payingOrder.table_no}`
-      : payingOrder.customer_name
-      ? payingOrder.customer_name
-      : 'Takeaway'
-
-    const sale: Sale = {
-      id: saleId,
-      business_id: activeBusiness.id,
-      total: payingOrder.total,
-      subtotal: payingOrder.subtotal,
-      discount: payingOrder.discount || 0,
-      tax: 0,
+    const updatedOrder: Order = {
+      ...payingOrder,
+      status: 'paid',
       payment_method: paymentMethod,
-      receipt_no: `ORD-${payingOrder.id.slice(-6).toUpperCase()}`,
-      notes: `Restaurant Order — ${orderLabel}`,
-      created_at: now,
       updated_at: now,
-      ...buildSyncMeta(),
     }
-    await db.sales.add(sale)
 
-    // 4. Create SaleItem records in db.saleItems
-    for (const item of orderItems) {
-      const saleItem: SaleItem = {
-        id: generateId(),
-        sale_id: saleId,
-        name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        discount: 0,
-        total: item.total,
-      }
-      await db.saleItems.add(saleItem)
-    }
+    // 2. Automatically record in db.sales & db.saleItems
+    await recordOrderAsSale(updatedOrder)
 
     setLoading(false)
     setPayingOrder(null)

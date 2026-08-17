@@ -49,6 +49,10 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       }
       // (if stillExists, no change needed — activeBusiness is already correct)
 
+      // 4. Ensure any restaurant orders are synced to sales
+      const { syncAllOrdersToSales } = await import('@/services/orderSaleSync')
+      await syncAllOrdersToSales()
+
       setLoadingBusinesses(false)
     }
 

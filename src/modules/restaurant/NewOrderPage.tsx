@@ -18,6 +18,7 @@ export default function NewOrderPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [tableNo, setTableNo] = useState('')
   const [customerName, setCustomerName] = useState('')
+  const [discount, setDiscount] = useState('')
   const [saving, setSaving] = useState(false)
   const [menuCategory, setMenuCategory] = useState<string>('all')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -84,40 +85,9 @@ export default function NewOrderPage() {
       await db.orderItems.add(oi)
     }
 
-    // IF PAID, AUTOMATICALLY RECORD AS PART OF SALES
-    if (isPaid) {
-      const saleId = generateId()
-      const orderLabel = order.table_no ? `Table ${order.table_no}` : order.customer_name ? order.customer_name : 'Takeaway'
-
-      const sale: Sale = {
-        id: saleId,
-        business_id: activeBusiness.id,
-        total,
-        subtotal,
-        discount: discountAmt,
-        tax: 0,
-        payment_method: paymentMethod,
-        receipt_no: `ORD-${orderId.slice(-6).toUpperCase()}`,
-        notes: `Restaurant Order — ${orderLabel}`,
-        created_at: now,
-        updated_at: now,
-        ...buildSyncMeta(),
-      }
-      await db.sales.add(sale)
-
-      for (const item of cart) {
-        const saleItem: SaleItem = {
-          id: generateId(),
-          sale_id: saleId,
-          name: item.name,
-          quantity: item.qty,
-          unit_price: item.price,
-          discount: 0,
-          total: item.price * item.qty,
-        }
-        await db.saleItems.add(saleItem)
-      }
-    }
+    // Automatically record every order as part of sales & income
+    const { recordOrderAsSale } = await import('@/services/orderSaleSync')
+    await recordOrderAsSale(order, cart.map(c => ({ name: c.name, price: c.price, qty: c.qty })))
 
     setSaving(false)
     navigate('/restaurant/orders')

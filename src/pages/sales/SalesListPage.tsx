@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, Search, Edit3, Lock, Check } from 'lucide-react'
@@ -6,6 +6,7 @@ import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
 import { formatRelative, formatDateTime, startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
+import { syncAllOrdersToSales } from '@/services/orderSaleSync'
 import type { Sale } from '@/types'
 import { PAYMENT_METHODS, type PaymentMethod } from '@/types/business'
 
@@ -32,6 +33,13 @@ export default function SalesListPage() {
   const [rangeStart, rangeEnd] = PERIOD_RANGES[period]
   const now = Date.now()
   const oneDayMs = 24 * 60 * 60 * 1000
+
+  // Ensure all restaurant orders are synced to sales on mount
+  useEffect(() => {
+    if (activeBusiness?.id) {
+      syncAllOrdersToSales(activeBusiness.id).catch(console.error)
+    }
+  }, [activeBusiness?.id])
 
   const sales = useLiveQuery(async () => {
     if (!activeBusiness) return []

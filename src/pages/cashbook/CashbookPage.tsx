@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, ArrowDownLeft, ArrowUpRight, Wallet, CheckCircle } from 'lucide-react'
 import { db, buildSyncMeta } from '@/database/dexie'
@@ -6,6 +6,7 @@ import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
 import { formatDateTime, startOfDay, endOfDay, startOfWeek, startOfMonth } from '@/utils/date'
 import { generateId } from '@/utils/deviceId'
+import { syncAllOrdersToSales } from '@/services/orderSaleSync'
 import type { CashTransaction } from '@/types'
 
 type Period = 'today' | 'week' | 'month'
@@ -18,6 +19,12 @@ export default function CashbookPage() {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (activeBusiness?.id) {
+      syncAllOrdersToSales(activeBusiness.id).catch(console.error)
+    }
+  }, [activeBusiness?.id])
 
   const rangeStart = period === 'today' ? startOfDay() : period === 'week' ? startOfWeek() : startOfMonth()
   const rangeEnd = endOfDay()

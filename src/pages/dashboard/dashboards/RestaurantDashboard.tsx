@@ -1,4 +1,5 @@
 // Restaurant Dashboard
+import { useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
@@ -7,10 +8,17 @@ import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
 import { formatRelative, startOfDay, endOfDay } from '@/utils/date'
 import { ProfitCard, QuickActionsGrid } from '@/components/dashboard/DashboardShell'
+import { syncAllOrdersToSales } from '@/services/orderSaleSync'
 
 export default function RestaurantDashboard() {
   const { activeBusiness } = useBusinessStore()
   const s = startOfDay(), e = endOfDay()
+
+  useEffect(() => {
+    if (activeBusiness?.id) {
+      syncAllOrdersToSales(activeBusiness.id).catch(console.error)
+    }
+  }, [activeBusiness?.id])
 
   const todaySales = useLiveQuery(async () => {
     if (!activeBusiness) return []
