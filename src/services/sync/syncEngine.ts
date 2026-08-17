@@ -27,6 +27,14 @@ const SYNC_TABLES: SyncMapping[] = [
   { name: 'transport_trips',           supabase: 'transport_trips',           filterField: 'business_id', getTable: () => db.transportTrips },
   { name: 'mobile_money_transactions', supabase: 'mobile_money_transactions', filterField: 'business_id', getTable: () => db.mobileMoneyTransactions },
   { name: 'income_entries',            supabase: 'income_entries',            filterField: 'business_id', getTable: () => db.incomeEntries },
+  // Clinic
+  { name: 'patients',                  supabase: 'patients',                  filterField: 'business_id', getTable: () => db.patients },
+  { name: 'patient_visits',            supabase: 'patient_visits',            filterField: 'business_id', getTable: () => db.patientVisits },
+  { name: 'prescriptions',             supabase: 'prescriptions',             filterField: 'business_id', getTable: () => db.prescriptions },
+  { name: 'patient_bills',             supabase: 'patient_bills',             filterField: 'business_id', getTable: () => db.patientBills },
+  // Restaurant
+  { name: 'menu_items',                supabase: 'menu_items',                filterField: 'business_id', getTable: () => db.menuItems },
+  { name: 'orders',                    supabase: 'orders',                    filterField: 'business_id', getTable: () => db.orders },
 ]
 
 let isSyncing = false

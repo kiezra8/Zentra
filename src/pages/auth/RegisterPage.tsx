@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2, WifiOff } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '@/services/supabase/client'
 import { useAuthStore } from '@/stores/authStore'
 import { useBusinessStore } from '@/stores/businessStore'
+import { db } from '@/database/dexie'
 
 
 export default function RegisterPage() {
@@ -30,20 +31,34 @@ export default function RegisterPage() {
 
     try {
       const { data, error: err } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
-        options: { data: { name } },
+        options: { data: { name: name.trim() } },
       })
       if (err) {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
           setIsNetworkError(true)
           setError('Could not connect to Supabase server. Check your project URL or internet connection.')
+        } else if (
+          err.message.toLowerCase().includes('already registered') ||
+          err.message.toLowerCase().includes('already exists') ||
+          err.message.toLowerCase().includes('user already registered')
+        ) {
+          setError('An account with this email address already exists. Please sign in instead.')
         } else {
           setError(err.message)
         }
         setLoading(false)
         return
       }
+
+      // Check if Supabase returned a user with no identities (occurs when user already registered)
+      if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+        setError('An account with this email address already exists. Please sign in instead.')
+        setLoading(false)
+        return
+      }
+
       setSession(data.session)
       if (data.session?.user) {
         const { pullUserBusinesses } = await import('@/services/sync/syncEngine')
@@ -66,11 +81,31 @@ export default function RegisterPage() {
     }
   }
 
-  function continueOffline() {
-    useAuthStore.setState({
-      user: { id: 'offline-' + Date.now(), email: email || 'user@zentra.local', user_metadata: { name: name || 'Local User' } } as never,
-      isLoading: false,
-    })
+  async function continueOffline() {
+    const cleanEmail = (email.trim() || 'user@zentra.local').toLowerCase()
+    
+    // Check if an offline session already exists with this email
+    const existing = await db.authSessions.where('email').equals(cleanEmail).first()
+    if (existing) {
+      useAuthStore.setState({
+        user: { id: existing.user_id, email: existing.email, user_metadata: { name: name.trim() || 'Local User' } } as never,
+        isLoading: false,
+      })
+    } else {
+      const newUserId = 'offline-' + Date.now()
+      await db.authSessions.add({
+        id: 'session-' + Date.now(),
+        user_id: newUserId,
+        email: cleanEmail,
+        access_token: 'offline-token',
+        refresh_token: 'offline-refresh',
+        expires_at: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      })
+      useAuthStore.setState({
+        user: { id: newUserId, email: cleanEmail, user_metadata: { name: name.trim() || 'Local User' } } as never,
+        isLoading: false,
+      })
+    }
     navigate('/onboarding')
   }
 

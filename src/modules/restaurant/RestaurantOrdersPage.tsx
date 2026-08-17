@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { Plus, CheckCircle } from 'lucide-react'
+import { Plus, CheckCircle, UtensilsCrossed } from 'lucide-react'
 import { db } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
@@ -43,14 +43,19 @@ export default function RestaurantOrdersPage() {
 
   return (
     <div className="page-container">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingTop: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingTop: '0.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h2>🪑 Orders</h2>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{activeOrders?.length ?? 0} active</p>
         </div>
-        <Link to="/restaurant/orders/new" className="btn btn-primary btn-sm" style={{ gap: '0.375rem', textDecoration: 'none' }}>
-          <Plus size={16} /> New Order
-        </Link>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <Link to="/restaurant/menu" className="btn btn-secondary btn-sm" style={{ gap: '0.375rem', textDecoration: 'none' }}>
+            <UtensilsCrossed size={15} /> Menu Setup
+          </Link>
+          <Link to="/restaurant/orders/new" className="btn btn-primary btn-sm" style={{ gap: '0.375rem', textDecoration: 'none' }}>
+            <Plus size={16} /> New Order
+          </Link>
+        </div>
       </div>
 
       {/* Tabs */}

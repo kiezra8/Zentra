@@ -77,11 +77,23 @@ export default function NewOrderPage() {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--surface-3)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: 'linear-gradient(135deg, #DC2626, #EF4444)', padding: '1.5rem 1.25rem 1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, padding: '0.5rem', color: 'white', cursor: 'pointer', display: 'flex' }}>
-            <ChevronLeft size={20} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, padding: '0.5rem', color: 'white', cursor: 'pointer', display: 'flex' }}>
+              <ChevronLeft size={20} />
+            </button>
+            <h1 style={{ color: 'white', fontSize: '1.25rem' }}>🍽️ New Order</h1>
+          </div>
+          <button
+            onClick={() => navigate('/restaurant/menu')}
+            style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+              padding: '0.4rem 0.75rem', color: 'white', cursor: 'pointer',
+              fontSize: '0.8125rem', fontWeight: 600,
+            }}
+          >
+            Menu Setup
           </button>
-          <h1 style={{ color: 'white', fontSize: '1.25rem' }}>🍽️ New Order</h1>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <input className="input" placeholder="Table No (optional)" value={tableNo} onChange={e => setTableNo(e.target.value)} style={{ flex: 1, background: 'rgba(255,255,255,0.9)' }} />

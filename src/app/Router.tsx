@@ -30,6 +30,7 @@ import ClinicDispensaryPage from '@/modules/clinic/ClinicDispensaryPage'
 // Restaurant module
 import RestaurantOrdersPage from '@/modules/restaurant/RestaurantOrdersPage'
 import NewOrderPage from '@/modules/restaurant/NewOrderPage'
+import RestaurantMenuPage from '@/modules/restaurant/RestaurantMenuPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore()
@@ -100,6 +101,7 @@ export function AppRouter() {
         <Route path="clinic/dispensary" element={<ClinicDispensaryPage />} />
         {/* Restaurant routes */}
         <Route path="restaurant/orders" element={<RestaurantOrdersPage />} />
+        <Route path="restaurant/menu" element={<RestaurantMenuPage />} />
       </Route>
 
       {/* Full-screen pages outside AppShell (have their own header/layout) */}

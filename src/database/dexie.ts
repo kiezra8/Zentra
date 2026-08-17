@@ -57,7 +57,7 @@ class ZentraDB extends Dexie {
 
     this.version(2).stores({
       // Add new tables
-      authSessions: 'id, user_id',
+      authSessions: 'id, user_id, email',
       patients: 'id, business_id, sync_status, name, created_at',
       patientVisits: 'id, business_id, patient_id, sync_status, created_at, status',
       prescriptions: 'id, visit_id, business_id, sync_status, dispensed',

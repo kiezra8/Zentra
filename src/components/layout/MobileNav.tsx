@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, ArrowLeftRight, BarChart3, MoreHorizontal, Plus,
-  Package, BookOpen, Users, Receipt, Building2, Sparkles, X, Settings
+  Package, BookOpen, Users, Receipt, Building2, Sparkles, X, Settings,
+  UtensilsCrossed, ClipboardList, Stethoscope, Pill, Bike, Wallet, DollarSign
 } from 'lucide-react'
 import { useSyncStore } from '@/stores/syncStore'
 import { useBusinessStore } from '@/stores/businessStore'
@@ -53,16 +54,28 @@ export function MobileTopBar() {
 
 export function MobileBottomNav() {
   const [showMoreDrawer, setShowMoreDrawer] = useState(false)
+  const { activeBusiness } = useBusinessStore()
   const navigate = useNavigate()
 
+  const isRestaurant = activeBusiness?.category === 'restaurant'
+  const isClinic = activeBusiness?.category === 'clinic'
+
   const moreMenuItems = [
+    ...(isRestaurant ? [
+      { to: '/restaurant/menu',   label: 'Menu Setup', icon: UtensilsCrossed, color: '#DC2626' },
+      { to: '/restaurant/orders', label: 'Orders',     icon: ClipboardList,   color: '#DC2626' },
+    ] : []),
+    ...(isClinic ? [
+      { to: '/clinic/patients',   label: 'Patients',   icon: Stethoscope, color: '#10B981' },
+      { to: '/clinic/dispensary', label: 'Dispensary', icon: Pill,        color: '#10B981' },
+    ] : []),
     { to: '/products',  label: 'Stock & Items', icon: Package, color: 'var(--primary)' },
     { to: '/cashbook',  label: 'Cashbook',      icon: BookOpen, color: '#059669' },
     { to: '/customers', label: 'Customers',     icon: Users,    color: '#7C3AED' },
     { to: '/expenses',  label: 'Expenses',      icon: Receipt,  color: '#DC2626' },
     { to: '/reports',   label: 'Reports',       icon: BarChart3, color: '#D97706' },
     { to: '/businesses',label: 'Businesses',    icon: Building2, color: '#4B5563' },
-    { to: '/settings',  label: 'Settings / Subscription', icon: Settings, color: '#0066FF' },
+    { to: '/settings',  label: 'Settings',      icon: Settings, color: '#0066FF' },
   ]
 
   return (

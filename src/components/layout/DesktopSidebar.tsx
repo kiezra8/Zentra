@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Receipt, BookOpen,
   Users, BarChart3, Settings, Building2, Bike, Wallet, DollarSign,
-  LogOut, ChevronDown, Package,
+  LogOut, ChevronDown, Package, UtensilsCrossed, ClipboardList, Stethoscope, Pill,
 } from 'lucide-react'
 import { useBusinessStore } from '@/stores/businessStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -21,11 +21,19 @@ const BASE_NAV = [
 ]
 
 const MODULE_NAV: Record<string, { to: string; label: string; icon: React.ElementType }[]> = {
-  boda_boda: [{ to: '/transport', label: 'Trips',          icon: Bike }],
-  taxi:       [{ to: '/transport', label: 'Trips',          icon: Bike }],
+  restaurant: [
+    { to: '/restaurant/menu',   label: 'Menu Setup', icon: UtensilsCrossed },
+    { to: '/restaurant/orders', label: 'Orders',     icon: ClipboardList },
+  ],
+  clinic: [
+    { to: '/clinic/patients',   label: 'Patients',   icon: Stethoscope },
+    { to: '/clinic/dispensary', label: 'Dispensary', icon: Pill },
+  ],
+  boda_boda:    [{ to: '/transport',    label: 'Trips',      icon: Bike }],
+  taxi:         [{ to: '/transport',    label: 'Trips',      icon: Bike }],
   mobile_money: [{ to: '/mobile-money', label: 'Agent Book', icon: Wallet }],
   bank_agent:   [{ to: '/mobile-money', label: 'Agent Book', icon: Wallet }],
-  hustler:    [{ to: '/hustler',   label: 'My Income',     icon: DollarSign }],
+  hustler:      [{ to: '/hustler',      label: 'My Income',  icon: DollarSign }],
 }
 
 export function DesktopSidebar() {
