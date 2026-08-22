@@ -6,7 +6,7 @@ import { db, buildSyncMeta } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { generateId } from '@/utils/deviceId'
 import { formatCurrency } from '@/utils/currency'
-import type { PatientVisit, Prescription, PatientBill, Patient } from '@/types'
+import type { PatientVisit, Prescription, PatientBill, Patient, Sale } from '@/types'
 
 const STEPS = ['Patient', 'Triage', 'Diagnosis', 'Prescriptions', 'Billing']
 
@@ -111,6 +111,26 @@ export default function NewVisitPage() {
         created_at: now, updated_at: now, ...buildSyncMeta(),
       }
       await db.patientBills.add(bill)
+
+      // Record payment as income (Sale) so it shows in Dashboard, Cashbook & Reports
+      const amountPaid = parseFloat(paidNow) || 0
+      if (amountPaid > 0) {
+        const sale: Sale = {
+          id: generateId(),
+          business_id: activeBusiness.id,
+          total: amountPaid,
+          subtotal: amountPaid,
+          discount: 0,
+          tax: 0,
+          payment_method: 'cash',
+          notes: `Patient billing — ${selectedPatient.name}`,
+          receipt_no: `CLN${now.toString().slice(-6)}`,
+          created_at: now,
+          updated_at: now,
+          ...buildSyncMeta(),
+        }
+        await db.sales.add(sale)
+      }
     }
 
     setSaving(false)

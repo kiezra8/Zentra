@@ -2,13 +2,13 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ChevronLeft, Plus, Phone, MapPin } from 'lucide-react'
+import { ChevronLeft, Plus } from 'lucide-react'
 import { db, buildSyncMeta } from '@/database/dexie'
 import { useBusinessStore } from '@/stores/businessStore'
 import { formatCurrency } from '@/utils/currency'
 import { formatDate, formatRelative } from '@/utils/date'
 import { generateId } from '@/utils/deviceId'
-import type { PatientBill } from '@/types'
+import type { PatientBill, Sale } from '@/types'
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -34,19 +34,45 @@ export default function PatientDetailPage() {
   const totalPaid = bills?.reduce((s, b) => s + b.paid, 0) ?? 0
 
   async function handlePartialPayment() {
-    if (!selectedBill || !payAmount) return
+    if (!selectedBill || !payAmount || !patient || !activeBusiness) return
     const amount = parseFloat(payAmount)
     if (isNaN(amount) || amount <= 0) return
+    const now = Date.now()
     const newPaid = selectedBill.paid + amount
     const newBalance = Math.max(0, selectedBill.total - newPaid)
     const newStatus: PatientBill['status'] = newBalance === 0 ? 'paid' : 'partial'
     await db.patientBills.update(selectedBill.id, {
-      paid: newPaid, balance: newBalance, status: newStatus, updated_at: Date.now(), sync_status: 'pending',
+      paid: newPaid, balance: newBalance, status: newStatus, updated_at: now, sync_status: 'pending',
     })
+
+    // Record payment as income so it shows in Dashboard, Cashbook & Reports
+    const sale: Sale = {
+      id: generateId(),
+      business_id: activeBusiness.id,
+      total: amount,
+      subtotal: amount,
+      discount: 0,
+      tax: 0,
+      payment_method: 'cash',
+      notes: `Patient billing — ${patient.name}`,
+      receipt_no: `CLN${now.toString().slice(-6)}`,
+      created_at: now,
+      updated_at: now,
+      ...buildSyncMeta(),
+    }
+    await db.sales.add(sale)
+
     setShowPayment(false)
     setPayAmount('')
     setSelectedBill(null)
   }
+
+  // undefined = still loading; null/missing = genuinely not found
+  if (patient === undefined) return (
+    <div className="page-container">
+      <div className="empty-state"><span className="empty-icon">⏳</span><p>Loading patient…</p></div>
+    </div>
+  )
 
   if (!patient) return (
     <div className="page-container">
@@ -127,17 +153,15 @@ export default function PatientDetailPage() {
             <Link to={`/clinic/visit/new?patient=${patient.id}`} className="btn btn-primary btn-sm" style={{ textDecoration: 'none', marginTop: '0.5rem' }}>Start First Visit</Link>
           </div>
         ) : visits.map(v => (
-          <Link key={v.id} to={`/clinic/visit/${v.id}`} style={{ textDecoration: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem', padding: '0.875rem 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem', flexShrink: 0 }}>🩺</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{v.chief_complaint}</div>
-                {v.diagnosis && <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginTop: 2 }}>Dx: {v.diagnosis}</div>}
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{formatRelative(v.visit_date)}</div>
-              </div>
-              <span className={`badge badge-${v.status === 'closed' ? 'success' : 'warning'}`} style={{ fontSize: '0.6875rem' }}>{v.status}</span>
+          <div key={v.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem', padding: '0.875rem 0', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem', flexShrink: 0 }}>🩺</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{v.chief_complaint}</div>
+              {v.diagnosis && <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginTop: 2 }}>Dx: {v.diagnosis}</div>}
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{formatRelative(v.visit_date)}</div>
             </div>
-          </Link>
+            <span className={`badge badge-${v.status === 'closed' ? 'success' : 'warning'}`} style={{ fontSize: '0.6875rem' }}>{v.status}</span>
+          </div>
         ))}
       </div>
 
